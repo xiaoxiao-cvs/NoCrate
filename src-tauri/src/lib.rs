@@ -98,6 +98,7 @@ pub fn run() {
             commands::fan::get_desktop_fan_policies,
             commands::fan::set_desktop_fan_policy,
             commands::fan::get_asushw_sensors,
+            commands::fan::test_asio_hw_fun,
             commands::fan::get_sio_sensors,
             commands::fan::get_sio_status,
             commands::aura::aura_is_available,

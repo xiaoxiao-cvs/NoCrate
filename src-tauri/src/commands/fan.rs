@@ -116,6 +116,26 @@ pub fn get_asushw_sensors(state: State<'_, AppState>) -> Result<Vec<AsusHWSensor
     with_wmi(&state, |conn| Ok(asus_mgmt::get_asushw_sensors(conn)))
 }
 
+/// 测试 asio_hw_fun* WMI 方法的可用性。
+///
+/// 返回一个包含 (方法名, 返回值/错误) 的诊断列表。
+#[tauri::command]
+pub fn test_asio_hw_fun(state: State<'_, AppState>) -> Result<Vec<(String, String)>, String> {
+    with_wmi(&state, |conn| {
+        let results = conn.test_asio_hw_fun()?;
+        Ok(results
+            .into_iter()
+            .map(|(label, r)| {
+                let val = match r {
+                    Ok(v) => format!("{v} (0x{v:02X})"),
+                    Err(e) => format!("ERROR: {e}"),
+                };
+                (label, val)
+            })
+            .collect())
+    })
+}
+
 // ---------------------------------------------------------------------------
 // Super I/O 传感器命令
 // ---------------------------------------------------------------------------
@@ -140,8 +160,8 @@ pub fn get_sio_sensors(state: State<'_, AppState>) -> Result<SioSnapshot, String
 pub fn get_sio_status(state: State<'_, AppState>) -> SioStatus {
     match &state.sio {
         Some(sio) => sio.status(),
-        None => crate::sio::unavailable_status(
-            state.sio_error.as_deref().unwrap_or("SIO 未初始化"),
-        ),
+        None => {
+            crate::sio::unavailable_status(state.sio_error.as_deref().unwrap_or("SIO 未初始化"))
+        }
     }
 }
