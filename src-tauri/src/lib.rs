@@ -90,6 +90,9 @@ pub fn run() {
             commands::fan::get_thermal_profile,
             commands::fan::set_thermal_profile,
             commands::fan::get_default_fan_curve,
+            commands::fan::get_wmi_backend,
+            commands::fan::get_desktop_fan_policies,
+            commands::fan::set_desktop_fan_policy,
             commands::aura::aura_is_available,
             commands::aura::aura_get_device_info,
             commands::aura::aura_set_effect,
@@ -99,6 +102,7 @@ pub fn run() {
             commands::config::get_config,
             commands::config::update_config,
             commands::system::is_admin,
+            commands::system::restart_as_admin,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

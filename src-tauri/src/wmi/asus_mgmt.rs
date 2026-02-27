@@ -1,90 +1,86 @@
-/// ASUS ATK WMI interface wrapper.
+/// ASUS WMI interface wrapper.
 ///
 /// Provides typed access to the ASUS motherboard management interface
-/// exposed via WMI class `ASUSATKWMI_WMNB`:
+/// exposed via WMI. Supports two backends:
 ///
-/// - **DSTS** (Device STatus): Read device values (fan speed, thermal profile, …)
-/// - **DEVS** (DEVice Set): Write device values (thermal profile, fan control, …)
+/// - **Laptop** (`ASUSATKWMI_WMNB`): Methods `DSTS` / `DEVS`
+/// - **Desktop** (`ASUSManagement`): Methods `device_status` / `device_ctrl`
+///
+/// The low-level `dsts` / `devs` calls are routed through
+/// [`WmiConnection::dsts`] / [`WmiConnection::devs`] which handle
+/// the backend-specific method names and parameter mapping.
 ///
 /// Device IDs sourced from the Linux kernel `asus-wmi` driver
-/// (`include/linux/platform_data/x86/asus-wmi.h`).
-///
-/// # Hardware Compatibility
-///
-/// Requires an ASUS motherboard with the ATK0110 ACPI device and the
-/// corresponding WMI driver (typically installed alongside ASUS chipset /
-/// system-utility drivers).
+/// (`include/linux/platform_data/x86/asus-wmi.h`) and the Armoury Crate
+/// / ASUS WMI desktop driver.
 use serde::{Deserialize, Serialize};
 
 use crate::error::{NoCrateError, Result};
-use crate::wmi::connection::WmiConnection;
+use crate::wmi::connection::{AsusWmiBackend, WmiConnection, WmiParam};
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-/// WMI instance path for the ASUS ATK interface.
-///
-/// This assumes the standard ATK0110 ACPI device. If a board uses a
-/// different instance name the constant will need adjustment.
-const ATK_OBJECT_PATH: &str = "ASUSATKWMI_WMNB.InstanceName='ACPI\\\\ATK0110\\\\0_0'";
-
-/// ASUS WMI Device IDs for use with the `DSTS` and `DEVS` methods.
+/// ASUS WMI Device IDs — shared between laptop and desktop backends.
 ///
 /// Reference: Linux kernel `include/linux/platform_data/x86/asus-wmi.h`
+///            and g-helper `AsusACPI.cs`.
 pub mod device_id {
-    /// CPU fan tachometer — RPM (read-only via DSTS).
+    /// CPU fan tachometer — RPM (read-only).
     pub const CPU_FAN_SPEED: u32 = 0x0011_0013;
 
-    /// GPU / chassis-fan-1 tachometer — RPM (read-only via DSTS).
+    /// GPU / chassis-fan-1 tachometer — RPM (read-only).
     pub const GPU_FAN_SPEED: u32 = 0x0011_0014;
 
-    /// Middle / chassis-fan-2 tachometer — RPM (read-only via DSTS).
+    /// Middle / chassis-fan-2 tachometer — RPM (read-only).
     pub const MID_FAN_SPEED: u32 = 0x0011_0031;
 
-    /// Thermal control master switch (DEVS).
+    /// Thermal control master switch.
+    #[allow(dead_code)]
     pub const THERMAL_CTRL: u32 = 0x0011_0011;
 
-    /// Fan control mode (DEVS).
+    /// Fan control mode.
+    #[allow(dead_code)]
     pub const FAN_CTRL: u32 = 0x0011_0012;
 
     /// Throttle thermal policy — the overall "profile"
     /// (Standard 0 / Performance 1 / Silent 2).
-    /// Read via DSTS, write via DEVS.
     pub const THROTTLE_THERMAL_POLICY: u32 = 0x0012_0075;
 
-    /// CPU fan-curve data (read/write via DSTS/DEVS).
+    /// CPU fan-curve data (read/write).
+    #[allow(dead_code)]
     pub const CPU_FAN_CURVE: u32 = 0x0011_0024;
 
-    /// GPU fan-curve data (read/write via DSTS/DEVS).
+    /// GPU fan-curve data (read/write).
+    #[allow(dead_code)]
     pub const GPU_FAN_CURVE: u32 = 0x0011_0025;
 
-    /// Middle fan-curve data (read/write via DSTS/DEVS).
+    /// Middle fan-curve data (read/write).
+    #[allow(dead_code)]
     pub const MID_FAN_CURVE: u32 = 0x0011_0032;
+
+    /// Firmware version query.
+    #[allow(dead_code)]
+    pub const CMD_FIRMWARE: u32 = 0x0002_0013;
 }
 
 // ---------------------------------------------------------------------------
 // Low-level WMI helpers
 // ---------------------------------------------------------------------------
 
-/// Read a device status value via the **DSTS** WMI method.
+/// Read a device status value — routed through the detected backend.
 ///
-/// Returns the raw `Device_Status` u32.
+/// Returns the raw status u32.
 pub fn dsts(conn: &WmiConnection, device_id: u32) -> Result<u32> {
-    let out = conn.exec_method(ATK_OBJECT_PATH, "DSTS", &[("Device_ID", device_id)])?;
-    WmiConnection::get_property_u32(&out, "Device_Status")
+    conn.dsts(device_id)
 }
 
-/// Write a device control value via the **DEVS** WMI method.
+/// Write a device control value — routed through the detected backend.
 ///
-/// Returns the raw result `Device_Status`.
+/// Returns the raw result status.
 pub fn devs(conn: &WmiConnection, device_id: u32, control: u32) -> Result<u32> {
-    let out = conn.exec_method(
-        ATK_OBJECT_PATH,
-        "DEVS",
-        &[("Device_ID", device_id), ("Control_Status", control)],
-    )?;
-    WmiConnection::get_property_u32(&out, "Device_Status")
+    conn.devs(device_id, control)
 }
 
 // ---------------------------------------------------------------------------
@@ -300,3 +296,204 @@ impl FanCurve {
 // Until then fan curves are managed locally in the frontend and
 // persisted to the config file. The thermal-profile toggle (Standard /
 // Performance / Silent) is the primary hardware control path.
+
+// ===========================================================================
+// Desktop motherboard support (ASUSManagement WMI class)
+// ===========================================================================
+
+/// Maximum number of fan headers to probe on a desktop motherboard.
+///
+/// ASUS desktop boards typically expose FanType 0–3 via `GetFanPolicy`.
+/// Headers returning `ErrorCode != 0` are considered absent.
+const DESKTOP_MAX_FAN_HEADERS: u8 = 8;
+
+/// Fan control mode on desktop boards.
+///
+/// Returned by `GetFanPolicy` as the `Mode` string.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum DesktopFanMode {
+    /// Voltage-controlled (DC).
+    Pwm,
+    /// Automatic control.
+    Auto,
+}
+
+impl DesktopFanMode {
+    fn from_wmi(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "PWM" => Self::Pwm,
+            _ => Self::Auto,
+        }
+    }
+
+    fn to_wmi(&self) -> &str {
+        match self {
+            Self::Pwm => "PWM",
+            Self::Auto => "AUTO",
+        }
+    }
+}
+
+/// Fan policy profile on desktop boards.
+///
+/// Returned by `GetFanPolicy` as the `Profile` string.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "UPPERCASE")]
+pub enum DesktopFanProfile {
+    /// User-defined manual curve.
+    Manual,
+    /// Default automatic curve.
+    Standard,
+}
+
+impl DesktopFanProfile {
+    fn from_wmi(s: &str) -> Self {
+        match s.to_uppercase().as_str() {
+            "MANUAL" => Self::Manual,
+            _ => Self::Standard,
+        }
+    }
+
+    fn to_wmi(&self) -> &str {
+        match self {
+            Self::Manual => "MANUAL",
+            Self::Standard => "STANDARD",
+        }
+    }
+}
+
+/// Complete fan policy for a single desktop fan header.
+///
+/// Read via `ASUSManagement.GetFanPolicy(FanType)` and written back
+/// via `ASUSManagement.SetFanPolicy(...)`.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DesktopFanPolicy {
+    /// Fan header index (0-based: 0 = CPU, 1–3 = chassis).
+    pub fan_type: u8,
+    /// Control mode: PWM (DC) or AUTO.
+    pub mode: DesktopFanMode,
+    /// Curve profile: MANUAL or STANDARD.
+    pub profile: DesktopFanProfile,
+    /// Temperature source (e.g. "CPU").
+    pub source: String,
+    /// Minimum RPM threshold.
+    pub low_limit: u32,
+}
+
+/// Friendly display names for desktop fan headers.
+const DESKTOP_FAN_NAMES: [&str; 8] = [
+    "CPU Fan",
+    "Chassis Fan 1",
+    "Chassis Fan 2",
+    "Chassis Fan 3",
+    "Chassis Fan 4",
+    "Chassis Fan 5",
+    "Chassis Fan 6",
+    "Chassis Fan 7",
+];
+
+/// Get the display name for a desktop fan header index.
+pub fn desktop_fan_name(fan_type: u8) -> &'static str {
+    DESKTOP_FAN_NAMES
+        .get(fan_type as usize)
+        .unwrap_or(&"Unknown Fan")
+}
+
+/// Read the fan policy for a single desktop fan header.
+///
+/// Returns `None` if the header does not exist (ErrorCode != 0).
+pub fn get_desktop_fan_policy(
+    conn: &WmiConnection,
+    fan_type: u8,
+) -> Result<Option<DesktopFanPolicy>> {
+    let instance_path = match &conn.backend {
+        AsusWmiBackend::Desktop { instance_path } => instance_path.clone(),
+        AsusWmiBackend::Laptop { .. } => {
+            return Err(NoCrateError::Wmi(
+                "GetFanPolicy is only available on desktop backends".into(),
+            ));
+        }
+    };
+
+    let out = conn.exec_method_v2(
+        &instance_path,
+        "GetFanPolicy",
+        &[("FanType", WmiParam::U8(fan_type))],
+    )?;
+
+    let error_code = WmiConnection::get_property_u32(&out, "ErrorCode")?;
+    if error_code != 0 {
+        return Ok(None); // Fan header not present
+    }
+
+    let mode = WmiConnection::get_property_string(&out, "Mode")?;
+    let profile = WmiConnection::get_property_string(&out, "Profile")?;
+    let source = WmiConnection::get_property_string(&out, "Source")?;
+    let low_limit = WmiConnection::get_property_u32(&out, "LowLimit")?;
+
+    Ok(Some(DesktopFanPolicy {
+        fan_type,
+        mode: DesktopFanMode::from_wmi(&mode),
+        profile: DesktopFanProfile::from_wmi(&profile),
+        source,
+        low_limit,
+    }))
+}
+
+/// Read fan policies for all present desktop fan headers.
+///
+/// Probes FanType 0 through [`DESKTOP_MAX_FAN_HEADERS`] and returns
+/// only headers that respond without error.
+pub fn get_all_desktop_fan_policies(conn: &WmiConnection) -> Vec<DesktopFanPolicy> {
+    (0..DESKTOP_MAX_FAN_HEADERS)
+        .filter_map(|ft| get_desktop_fan_policy(conn, ft).ok().flatten())
+        .collect()
+}
+
+/// Write a fan policy to a desktop fan header.
+///
+/// # Errors
+///
+/// Returns an error if the WMI call fails or the backend is not desktop.
+pub fn set_desktop_fan_policy(conn: &WmiConnection, policy: &DesktopFanPolicy) -> Result<()> {
+    let instance_path = match &conn.backend {
+        AsusWmiBackend::Desktop { instance_path } => instance_path.clone(),
+        AsusWmiBackend::Laptop { .. } => {
+            return Err(NoCrateError::Wmi(
+                "SetFanPolicy is only available on desktop backends".into(),
+            ));
+        }
+    };
+
+    let out = conn.exec_method_v2(
+        &instance_path,
+        "SetFanPolicy",
+        &[
+            ("FanType", WmiParam::U8(policy.fan_type)),
+            ("LowLimit", WmiParam::U32(policy.low_limit)),
+            ("Mode", WmiParam::Str(policy.mode.to_wmi())),
+            ("Profile", WmiParam::Str(policy.profile.to_wmi())),
+            ("Source", WmiParam::Str(&policy.source)),
+        ],
+    )?;
+
+    let error_code = WmiConnection::get_property_u32(&out, "ErrorCode")?;
+    if error_code != 0 {
+        return Err(NoCrateError::Wmi(format!(
+            "SetFanPolicy failed for FanType {} with ErrorCode {error_code}",
+            policy.fan_type,
+        )));
+    }
+
+    Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Backend detection helper
+// ---------------------------------------------------------------------------
+
+/// Returns `true` if the current WMI connection uses the desktop backend.
+pub fn is_desktop_backend(conn: &WmiConnection) -> bool {
+    matches!(conn.backend, AsusWmiBackend::Desktop { .. })
+}

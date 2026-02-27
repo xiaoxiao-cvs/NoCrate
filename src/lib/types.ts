@@ -68,3 +68,35 @@ export const FAN_TARGET_LABELS: Record<FanTarget, string> = {
   gpu: "GPU",
   mid: "机箱",
 };
+
+// ─── Desktop Fan Policy ──────────────────────────────────────
+
+/** Fan control mode on desktop boards. */
+export type DesktopFanMode = "PWM" | "AUTO";
+
+/** Fan curve profile on desktop boards. */
+export type DesktopFanProfile = "MANUAL" | "STANDARD";
+
+/** Complete fan policy for a single desktop fan header. */
+export interface DesktopFanPolicy {
+  fan_type: number;
+  mode: DesktopFanMode;
+  profile: DesktopFanProfile;
+  source: string;
+  low_limit: number;
+}
+
+/** Display names for desktop fan header indices. */
+export const DESKTOP_FAN_NAMES: Record<number, string> = {
+  0: "CPU Fan",
+  1: "机箱风扇 1",
+  2: "机箱风扇 2",
+  3: "机箱风扇 3",
+  4: "机箱风扇 4",
+  5: "机箱风扇 5",
+  6: "机箱风扇 6",
+  7: "机箱风扇 7",
+};
+
+/** WMI backend type. */
+export type WmiBackend = "desktop" | "laptop";
