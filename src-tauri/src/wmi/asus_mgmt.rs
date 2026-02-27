@@ -312,26 +312,33 @@ const DESKTOP_MAX_FAN_HEADERS: u8 = 8;
 /// Fan control mode on desktop boards.
 ///
 /// Returned by `GetFanPolicy` as the `Mode` string.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum DesktopFanMode {
-    /// Voltage-controlled (DC).
+    /// PWM (pulse-width modulation) control.
     Pwm,
-    /// Automatic control.
+    /// Voltage-controlled (DC).
+    Dc,
+    /// Automatic control (board decides PWM/DC).
     Auto,
 }
 
 impl DesktopFanMode {
-    fn from_wmi(s: &str) -> Self {
+    /// All modes, handy for iteration / UI.
+    pub const ALL: [Self; 3] = [Self::Pwm, Self::Dc, Self::Auto];
+
+    pub fn from_wmi(s: &str) -> Self {
         match s.to_uppercase().as_str() {
             "PWM" => Self::Pwm,
+            "DC" => Self::Dc,
             _ => Self::Auto,
         }
     }
 
-    fn to_wmi(&self) -> &str {
+    pub fn to_wmi(self) -> &'static str {
         match self {
             Self::Pwm => "PWM",
+            Self::Dc => "DC",
             Self::Auto => "AUTO",
         }
     }
@@ -340,7 +347,7 @@ impl DesktopFanMode {
 /// Fan policy profile on desktop boards.
 ///
 /// Returned by `GetFanPolicy` as the `Profile` string.
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "UPPERCASE")]
 pub enum DesktopFanProfile {
     /// User-defined manual curve.
@@ -350,15 +357,14 @@ pub enum DesktopFanProfile {
 }
 
 impl DesktopFanProfile {
-    #[allow(dead_code)]
-    fn from_wmi(s: &str) -> Self {
+    pub fn from_wmi(s: &str) -> Self {
         match s.to_uppercase().as_str() {
             "MANUAL" => Self::Manual,
             _ => Self::Standard,
         }
     }
 
-    fn to_wmi(&self) -> &str {
+    pub fn to_wmi(self) -> &'static str {
         match self {
             Self::Manual => "MANUAL",
             Self::Standard => "STANDARD",
@@ -479,6 +485,8 @@ pub fn set_desktop_fan_policy(conn: &WmiConnection, policy: &DesktopFanPolicy) -
             ("LowLimit", WmiParam::U32(policy.low_limit)),
             ("Mode", WmiParam::Str(policy.mode.to_wmi())),
             ("Profile", WmiParam::Str(policy.profile.to_wmi())),
+            // Source 可以为空字符串（CPU Fan 时）
+            // WMI 方法会根据 FanType 自动确定默认源
             ("Source", WmiParam::Str(&policy.source)),
         ],
     )?;
@@ -492,6 +500,199 @@ pub fn set_desktop_fan_policy(conn: &WmiConnection, policy: &DesktopFanPolicy) -
     }
 
     Ok(())
+}
+
+// ---------------------------------------------------------------------------
+// Desktop fan curve (GetManualFanCurvePro / SetManualFanCurvePro)
+// ---------------------------------------------------------------------------
+
+/// 桌面主板 8 点风扇曲线。
+///
+/// 通过 `GetManualFanCurvePro` 读取，`SetManualFanCurvePro` 写入。
+/// 每条曲线绑定一个 FanType + Mode 组合。
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct DesktopFanCurve {
+    /// 风扇头索引 (0 = CPU, 1 = Chassis1, ...)
+    pub fan_type: u8,
+    /// 控制模式 (PWM / DC / AUTO)
+    pub mode: DesktopFanMode,
+    /// 8 个温度→占空比映射点
+    pub points: [FanCurvePoint; FAN_CURVE_POINTS],
+}
+
+/// 读取桌面主板某个风扇头在指定模式下的 8 点曲线。
+///
+/// # 参数
+/// - `fan_type`: 风扇头索引 (0–7)
+/// - `mode`: 控制模式 (PWM / DC / AUTO)
+///
+/// # 返回
+/// - `Ok(Some(curve))` — 成功读取
+/// - `Ok(None)` — 该风扇头不存在 (ErrorCode != 0)
+/// - `Err(...)` — WMI 调用失败
+pub fn get_desktop_fan_curve_pro(
+    conn: &WmiConnection,
+    fan_type: u8,
+    mode: DesktopFanMode,
+) -> Result<Option<DesktopFanCurve>> {
+    let instance_path = match &conn.backend {
+        AsusWmiBackend::Desktop { instance_path } => instance_path.clone(),
+        _ => {
+            return Err(NoCrateError::Wmi(
+                "GetManualFanCurvePro 仅在 Desktop 后端可用".into(),
+            ));
+        }
+    };
+
+    let out = conn.exec_method_v2(
+        &instance_path,
+        "GetManualFanCurvePro",
+        &[
+            ("FanType", WmiParam::U8(fan_type)),
+            ("Mode", WmiParam::Str(mode.to_wmi())),
+        ],
+    )?;
+
+    let error_code = WmiConnection::get_property_u32(&out, "ErrorCode")?;
+    if error_code != 0 {
+        return Ok(None);
+    }
+
+    // 解析 8 个点：Point1Temp ~ Point8Temp, Point1Duty ~ Point8Duty
+    let mut points = [FanCurvePoint {
+        temp_c: 0,
+        duty_pct: 0,
+    }; FAN_CURVE_POINTS];
+
+    for i in 0..FAN_CURVE_POINTS {
+        let idx = i + 1;
+        let temp_name = format!("Point{idx}Temp");
+        let duty_name = format!("Point{idx}Duty");
+
+        points[i].temp_c =
+            WmiConnection::get_property_u32(&out, &temp_name)? as u8;
+        points[i].duty_pct =
+            WmiConnection::get_property_u32(&out, &duty_name)? as u8;
+    }
+
+    Ok(Some(DesktopFanCurve {
+        fan_type,
+        mode,
+        points,
+    }))
+}
+
+/// 写入桌面主板某个风扇头在指定模式下的 8 点曲线。
+///
+/// # 校验
+/// - 温度值必须单调递增
+/// - Duty 值必须在 0–100 范围内
+pub fn set_desktop_fan_curve_pro(
+    conn: &WmiConnection,
+    curve: &DesktopFanCurve,
+) -> Result<()> {
+    // 校验温度单调递增
+    for i in 1..FAN_CURVE_POINTS {
+        if curve.points[i].temp_c < curve.points[i - 1].temp_c {
+            return Err(NoCrateError::Wmi(format!(
+                "温度值必须单调递增: Point{} ({}°C) < Point{} ({}°C)",
+                i + 1,
+                curve.points[i].temp_c,
+                i,
+                curve.points[i - 1].temp_c,
+            )));
+        }
+    }
+
+    // 校验 Duty 范围
+    for (i, p) in curve.points.iter().enumerate() {
+        if p.duty_pct > 100 {
+            return Err(NoCrateError::Wmi(format!(
+                "占空比超出范围: Point{} = {}%",
+                i + 1,
+                p.duty_pct,
+            )));
+        }
+    }
+
+    let instance_path = match &conn.backend {
+        AsusWmiBackend::Desktop { instance_path } => instance_path.clone(),
+        _ => {
+            return Err(NoCrateError::Wmi(
+                "SetManualFanCurvePro 仅在 Desktop 后端可用".into(),
+            ));
+        }
+    };
+
+    // 组装 WMI 参数：FanType + Mode + Point1Temp...Point8Temp + Point1Duty...Point8Duty
+    let mut params: Vec<(&str, WmiParam)> = Vec::with_capacity(2 + FAN_CURVE_POINTS * 2);
+    params.push(("FanType", WmiParam::U8(curve.fan_type)));
+    params.push(("Mode", WmiParam::Str(curve.mode.to_wmi())));
+
+    // WMI 的参数名不能用动态 String，需要用 'static str
+    // 硬编码 8 个点的参数名
+    const TEMP_NAMES: [&str; 8] = [
+        "Point1Temp",
+        "Point2Temp",
+        "Point3Temp",
+        "Point4Temp",
+        "Point5Temp",
+        "Point6Temp",
+        "Point7Temp",
+        "Point8Temp",
+    ];
+    const DUTY_NAMES: [&str; 8] = [
+        "Point1Duty",
+        "Point2Duty",
+        "Point3Duty",
+        "Point4Duty",
+        "Point5Duty",
+        "Point6Duty",
+        "Point7Duty",
+        "Point8Duty",
+    ];
+
+    for i in 0..FAN_CURVE_POINTS {
+        params.push((TEMP_NAMES[i], WmiParam::U8(curve.points[i].temp_c)));
+        params.push((DUTY_NAMES[i], WmiParam::U8(curve.points[i].duty_pct)));
+    }
+
+    let out = conn.exec_method_v2(&instance_path, "SetManualFanCurvePro", &params)?;
+
+    let error_code = WmiConnection::get_property_u32(&out, "ErrorCode")?;
+    if error_code != 0 {
+        return Err(NoCrateError::Wmi(format!(
+            "SetManualFanCurvePro 失败: FanType={}, Mode={}, ErrorCode={error_code}",
+            curve.fan_type,
+            curve.mode.to_wmi(),
+        )));
+    }
+
+    Ok(())
+}
+
+/// 探测所有存在的桌面风扇头及其支持的模式。
+///
+/// 返回 `(fan_type, Vec<DesktopFanMode>)` 列表。
+/// 通过尝试 `GetManualFanCurvePro` 来判断某 FanType+Mode 组合是否可用。
+pub fn probe_desktop_fan_types(
+    conn: &WmiConnection,
+) -> Vec<(u8, Vec<DesktopFanMode>)> {
+    let mut result = Vec::new();
+
+    for ft in 0..DESKTOP_MAX_FAN_HEADERS {
+        let mut modes = Vec::new();
+        for mode in DesktopFanMode::ALL {
+            if let Ok(Some(_)) = get_desktop_fan_curve_pro(conn, ft, mode) {
+                modes.push(mode);
+            }
+        }
+        if !modes.is_empty() {
+            result.push((ft, modes));
+        }
+    }
+
+    result
 }
 
 // ---------------------------------------------------------------------------

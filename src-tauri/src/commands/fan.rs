@@ -7,7 +7,8 @@ use tauri::State;
 
 use crate::state::AppState;
 use crate::wmi::asus_mgmt::{
-    self, AsusHWSensor, DesktopFanPolicy, FanCurve, FanInfo, FanTarget, ThermalProfile,
+    self, AsusHWSensor, DesktopFanCurve, DesktopFanMode, DesktopFanPolicy, FanCurve, FanInfo,
+    FanTarget, ThermalProfile,
 };
 
 /// Helper: get a reference to the WmiThread or return an error string.
@@ -114,6 +115,49 @@ pub fn set_desktop_fan_policy(
 #[tauri::command]
 pub fn get_asushw_sensors(state: State<'_, AppState>) -> Result<Vec<AsusHWSensor>, String> {
     with_wmi(&state, |conn| Ok(asus_mgmt::get_asushw_sensors(conn)))
+}
+
+// ---------------------------------------------------------------------------
+// Desktop 风扇曲线命令 (GetManualFanCurvePro / SetManualFanCurvePro)
+// ---------------------------------------------------------------------------
+
+/// 读取某个风扇头在指定模式下的 8 点曲线。
+///
+/// 返回 `null` 表示该风扇头不存在。
+#[tauri::command]
+pub fn get_desktop_fan_curve(
+    state: State<'_, AppState>,
+    fan_type: u8,
+    mode: DesktopFanMode,
+) -> Result<Option<DesktopFanCurve>, String> {
+    with_wmi(&state, move |conn| {
+        asus_mgmt::get_desktop_fan_curve_pro(conn, fan_type, mode)
+    })
+}
+
+/// 写入某个风扇头的 8 点曲线。
+///
+/// 会校验温度单调递增和 Duty 范围。
+#[tauri::command]
+pub fn set_desktop_fan_curve(
+    state: State<'_, AppState>,
+    curve: DesktopFanCurve,
+) -> Result<(), String> {
+    with_wmi(&state, move |conn| {
+        asus_mgmt::set_desktop_fan_curve_pro(conn, &curve)
+    })
+}
+
+/// 探测所有存在的风扇头及其支持的控制模式。
+///
+/// 返回 `[(fan_type, [modes...])]` 列表。
+#[tauri::command]
+pub fn probe_desktop_fan_types(
+    state: State<'_, AppState>,
+) -> Result<Vec<(u8, Vec<DesktopFanMode>)>, String> {
+    with_wmi(&state, |conn| {
+        Ok(asus_mgmt::probe_desktop_fan_types(conn))
+    })
 }
 
 /// 测试 asio_hw_fun* WMI 方法的可用性。
