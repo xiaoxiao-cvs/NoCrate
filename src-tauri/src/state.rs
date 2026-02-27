@@ -1,9 +1,11 @@
+use std::path::PathBuf;
 use std::sync::mpsc;
 use std::thread;
 
 use parking_lot::Mutex;
 
 use crate::aura::controller::AuraController;
+use crate::config::ConfigStore;
 use crate::error::{NoCrateError, Result};
 use crate::wmi::connection::WmiConnection;
 
@@ -97,6 +99,8 @@ pub struct AppState {
     /// AURA controller behind a Mutex (HidDevice is Send but not Sync).
     /// `None` if no controller was found at startup.
     pub aura: Mutex<Option<AuraController>>,
+    /// Persistent configuration store.
+    pub config: ConfigStore,
 }
 
 impl AppState {
@@ -106,7 +110,7 @@ impl AppState {
     ///
     /// Returns an error if WMI initialization fails.
     /// AURA discovery failure is non-fatal (stored as `None`).
-    pub fn new() -> Result<Self> {
+    pub fn new(app_data_dir: PathBuf) -> Result<Self> {
         let wmi = WmiThread::spawn()?;
 
         let aura = match AuraController::discover() {
@@ -120,9 +124,12 @@ impl AppState {
             }
         };
 
+        let config = ConfigStore::init(app_data_dir)?;
+
         Ok(Self {
             wmi,
             aura: Mutex::new(aura),
+            config,
         })
     }
 }
