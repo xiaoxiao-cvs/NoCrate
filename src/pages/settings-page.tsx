@@ -1,5 +1,14 @@
 import { motion } from "motion/react";
-import { Settings, Monitor, Moon, Sun, Info, RefreshCw } from "lucide-react";
+import {
+  Settings,
+  Monitor,
+  Moon,
+  Sun,
+  Info,
+  RefreshCw,
+  ShieldCheck,
+  ShieldAlert,
+} from "lucide-react";
 
 import { staggerContainer, staggerItem, spring } from "@/lib/motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -8,6 +17,7 @@ import { Select, type SelectOption } from "@/components/ui/select";
 import { useConfig } from "@/hooks/use-config";
 import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
+import { useAdminStatus } from "@/hooks/use-admin-status";
 
 // ─── Theme Options ───────────────────────────────────────────
 const themeOptions: SelectOption[] = [
@@ -56,6 +66,7 @@ export default function SettingsPage() {
   const { config, loading, update } = useConfig();
   const { setTheme } = useTheme();
   const toast = useToast();
+  const isAdmin = useAdminStatus();
 
   const handleThemeChange = async (value: string) => {
     try {
@@ -202,6 +213,22 @@ export default function SettingsPage() {
               <div className="flex justify-between">
                 <span className="text-muted-foreground">描述</span>
                 <span>轻量级 ASUS 主板硬件控制工具</span>
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-muted-foreground">权限状态</span>
+                {isAdmin === null ? (
+                  <span className="text-xs text-muted-foreground">检测中...</span>
+                ) : isAdmin ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
+                    <ShieldCheck className="h-3.5 w-3.5" />
+                    管理员
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive">
+                    <ShieldAlert className="h-3.5 w-3.5" />
+                    普通用户
+                  </span>
+                )}
               </div>
               <p className="pt-2 text-xs text-muted-foreground">
                 替代 Armoury Crate，仅保留风扇调节与 ARGB 灯效控制。

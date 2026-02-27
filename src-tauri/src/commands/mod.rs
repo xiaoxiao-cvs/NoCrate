@@ -1,6 +1,7 @@
 pub mod aura;
 pub mod config;
 pub mod fan;
+pub mod system;
 
 /// Placeholder greet command for initial setup verification.
 #[tauri::command]

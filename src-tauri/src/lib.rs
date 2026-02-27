@@ -98,6 +98,7 @@ pub fn run() {
             commands::aura::aura_set_direct_colors,
             commands::config::get_config,
             commands::config::update_config,
+            commands::system::is_admin,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
