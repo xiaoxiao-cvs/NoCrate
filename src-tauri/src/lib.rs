@@ -1,3 +1,4 @@
+mod aura;
 mod commands;
 mod error;
 mod state;
@@ -32,6 +33,12 @@ pub fn run() {
             commands::fan::get_thermal_profile,
             commands::fan::set_thermal_profile,
             commands::fan::get_default_fan_curve,
+            commands::aura::aura_is_available,
+            commands::aura::aura_get_device_info,
+            commands::aura::aura_set_effect,
+            commands::aura::aura_set_static_color,
+            commands::aura::aura_turn_off,
+            commands::aura::aura_set_direct_colors,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

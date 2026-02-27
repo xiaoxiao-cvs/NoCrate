@@ -1,6 +1,9 @@
 use std::sync::mpsc;
 use std::thread;
 
+use parking_lot::Mutex;
+
+use crate::aura::controller::AuraController;
 use crate::error::{NoCrateError, Result};
 use crate::wmi::connection::WmiConnection;
 
@@ -25,7 +28,7 @@ impl WmiThread {
         let (init_tx, init_rx) = mpsc::channel::<std::result::Result<(), NoCrateError>>();
         let (req_tx, req_rx) = mpsc::channel::<WmiRequest>();
 
-        thread::Builder::new()
+        let _handle = thread::Builder::new()
             .name("nocrate-wmi".into())
             .spawn(move || {
                 // Attempt to create the WMI connection on this thread
@@ -91,6 +94,9 @@ impl WmiThread {
 /// Holds shared resources accessible from all commands.
 pub struct AppState {
     pub wmi: WmiThread,
+    /// AURA controller behind a Mutex (HidDevice is Send but not Sync).
+    /// `None` if no controller was found at startup.
+    pub aura: Mutex<Option<AuraController>>,
 }
 
 impl AppState {
@@ -99,8 +105,24 @@ impl AppState {
     /// # Errors
     ///
     /// Returns an error if WMI initialization fails.
+    /// AURA discovery failure is non-fatal (stored as `None`).
     pub fn new() -> Result<Self> {
         let wmi = WmiThread::spawn()?;
-        Ok(Self { wmi })
+
+        let aura = match AuraController::discover() {
+            Ok(ctrl) => {
+                eprintln!("AURA controller found: {:?}", ctrl.info());
+                Some(ctrl)
+            }
+            Err(e) => {
+                eprintln!("AURA controller not found: {e}");
+                None
+            }
+        };
+
+        Ok(Self {
+            wmi,
+            aura: Mutex::new(aura),
+        })
     }
 }

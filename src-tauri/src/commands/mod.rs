@@ -1,3 +1,4 @@
+pub mod aura;
 pub mod fan;
 
 /// Placeholder greet command for initial setup verification.
