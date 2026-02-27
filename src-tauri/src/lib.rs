@@ -6,6 +6,8 @@ mod state;
 mod wmi;
 
 use state::AppState;
+use tauri::menu::{Menu, MenuItem};
+use tauri::tray::TrayIconBuilder;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -31,7 +33,55 @@ pub fn run() {
                     eprintln!("Fan control features will be unavailable.");
                 }
             }
+
+            // ── System Tray ──────────────────────────────────
+            let show_item = MenuItem::with_id(app, "show", "显示主窗口", true, None::<&str>)?;
+            let quit_item = MenuItem::with_id(app, "quit", "退出", true, None::<&str>)?;
+            let menu = Menu::with_items(app, &[&show_item, &quit_item])?;
+
+            let _tray = TrayIconBuilder::new()
+                .icon(app.default_window_icon().cloned().unwrap())
+                .tooltip("NoCrate — ASUS 主板控制")
+                .menu(&menu)
+                .show_menu_on_left_click(false)
+                .on_menu_event(|app, event| match event.id.as_ref() {
+                    "show" => {
+                        if let Some(win) = app.get_webview_window("main") {
+                            let _ = win.show();
+                            let _ = win.unminimize();
+                            let _ = win.set_focus();
+                        }
+                    }
+                    "quit" => {
+                        app.exit(0);
+                    }
+                    _ => {}
+                })
+                .on_tray_icon_event(|tray, event| {
+                    if let tauri::tray::TrayIconEvent::DoubleClick { .. } = event {
+                        let app = tray.app_handle();
+                        if let Some(win) = app.get_webview_window("main") {
+                            let _ = win.show();
+                            let _ = win.unminimize();
+                            let _ = win.set_focus();
+                        }
+                    }
+                })
+                .build(app)?;
+
             Ok(())
+        })
+        .on_window_event(|window, event| {
+            // Intercept close if "close_to_tray" is enabled
+            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                let app = window.app_handle();
+                if let Some(state) = app.try_state::<AppState>() {
+                    if state.config.get().close_to_tray {
+                        api.prevent_close();
+                        let _ = window.hide();
+                    }
+                }
+            }
         })
         .invoke_handler(tauri::generate_handler![
             commands::greet,
