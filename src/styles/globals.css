@@ -1,5 +1,31 @@
 @import "tailwindcss";
 
+/* ── Design Tokens ── */
+@theme inline {
+  /* Background — light: white stack, dark: near-black stack */
+  --color-bg-primary: var(--bg-primary);
+  --color-bg-secondary: var(--bg-secondary);
+  --color-bg-tertiary: var(--bg-tertiary);
+
+  /* Border */
+  --color-border: var(--border);
+  --color-border-hover: var(--border-hover);
+
+  /* Text */
+  --color-text-primary: var(--text-primary);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+
+  /* Accent — pure black/white only */
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+
+  /* Destructive — only used for close button & errors */
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+}
+
+/* ── Light Theme (default) ── */
 :root {
   --bg-primary: #ffffff;
   --bg-secondary: #f5f5f5;
@@ -15,6 +41,7 @@
   --destructive-foreground: #fafafa;
 }
 
+/* ── Dark Theme ── */
 .dark {
   --bg-primary: #0a0a0a;
   --bg-secondary: #141414;
@@ -30,6 +57,7 @@
   --destructive-foreground: #fafafa;
 }
 
+/* ── Base Resets ── */
 * {
   margin: 0;
   padding: 0;
@@ -43,11 +71,51 @@ body {
   overflow: hidden;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  /* Prevent text selection during drag operations */
   user-select: none;
+  /* Smooth theme transitions */
+  transition:
+    background-color 200ms ease,
+    color 200ms ease;
 }
 
-/* Tabular numbers for monospace digits in gauges and readouts */
+/* ── Utilities ── */
 .tabular-nums {
   font-variant-numeric: tabular-nums;
+}
+
+/* ── Reduced Motion ── */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* ── Focus Visible ── */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+/* ── Scrollbar (minimal, theme-aware) ── */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--border-hover);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--text-muted);
 }
