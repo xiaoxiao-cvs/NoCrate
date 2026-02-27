@@ -19,3 +19,13 @@ Thumbs.db
 .env
 .env.local
 *.log
+
+# Diagnostic / temp files
+asio_diag.txt
+asio_test*.txt
+sio_diag.log
+sio_test.log
+wmi_test.txt
+wmi_test.ps1
+run_asio.ps1
+run_test.ps1
