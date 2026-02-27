@@ -32,8 +32,6 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": {
-      "resources/WinRing0x64.sys": "WinRing0x64.sys"
-    }
+    "resources": {}
   }
 }
