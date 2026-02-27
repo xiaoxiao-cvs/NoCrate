@@ -93,6 +93,7 @@ pub fn run() {
             commands::fan::get_wmi_backend,
             commands::fan::get_desktop_fan_policies,
             commands::fan::set_desktop_fan_policy,
+            commands::fan::get_asushw_sensors,
             commands::aura::aura_is_available,
             commands::aura::aura_get_device_info,
             commands::aura::aura_set_effect,

@@ -99,4 +99,18 @@ export const DESKTOP_FAN_NAMES: Record<number, string> = {
 };
 
 /** WMI backend type. */
-export type WmiBackend = "desktop" | "laptop";
+export type WmiBackend = "desktop" | "laptop" | "asushw";
+
+// ─── ASUSHW Sensor types ─────────────────────────────────────
+
+/** A single sensor reading from the ASUSHW backend. */
+export interface AsusHWSensor {
+  index: number;
+  name: string;
+  /** "temperature" | "fan" */
+  sensor_type: string;
+  /** °C for temperature, RPM for fans */
+  value: number;
+  source: number;
+  data_type: number;
+}

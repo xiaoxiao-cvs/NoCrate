@@ -409,7 +409,7 @@ pub fn get_desktop_fan_policy(
 ) -> Result<Option<DesktopFanPolicy>> {
     let instance_path = match &conn.backend {
         AsusWmiBackend::Desktop { instance_path } => instance_path.clone(),
-        AsusWmiBackend::Laptop { .. } => {
+        _ => {
             return Err(NoCrateError::Wmi(
                 "GetFanPolicy is only available on desktop backends".into(),
             ));
@@ -459,7 +459,7 @@ pub fn get_all_desktop_fan_policies(conn: &WmiConnection) -> Vec<DesktopFanPolic
 pub fn set_desktop_fan_policy(conn: &WmiConnection, policy: &DesktopFanPolicy) -> Result<()> {
     let instance_path = match &conn.backend {
         AsusWmiBackend::Desktop { instance_path } => instance_path.clone(),
-        AsusWmiBackend::Laptop { .. } => {
+        _ => {
             return Err(NoCrateError::Wmi(
                 "SetFanPolicy is only available on desktop backends".into(),
             ));
@@ -496,4 +496,95 @@ pub fn set_desktop_fan_policy(conn: &WmiConnection, policy: &DesktopFanPolicy) -
 /// Returns `true` if the current WMI connection uses the desktop backend.
 pub fn is_desktop_backend(conn: &WmiConnection) -> bool {
     matches!(conn.backend, AsusWmiBackend::Desktop { .. })
+}
+
+// ---------------------------------------------------------------------------
+// ASUSHW Sensor types & helpers
+// ---------------------------------------------------------------------------
+
+/// A single sensor reading from the ASUSHW backend.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct AsusHWSensor {
+    /// Zero-based sensor index.
+    pub index: u32,
+    /// Human-readable name (e.g. "CPU Temperature", "CPU Fan").
+    pub name: String,
+    /// `"temperature"` (°C) or `"fan"` (RPM).
+    pub sensor_type: String,
+    /// Current value (°C for temps, RPM for fans).
+    pub value: f32,
+    /// Internal source group ID (for `sensor_update_buffer`).
+    pub source: u32,
+    /// Internal data-type flag (3 = micro-units).
+    pub data_type: u32,
+}
+
+/// Discover all sensors from the ASUSHW backend.
+///
+/// Enumerates sensors via `sensor_get_number` / `sensor_get_info`,
+/// updates buffers, and reads current values.
+pub fn get_asushw_sensors(conn: &WmiConnection) -> Vec<AsusHWSensor> {
+    let count = match conn.asushw_sensor_count() {
+        Ok(c) => c,
+        Err(e) => {
+            eprintln!("[ASUSHW] sensor_get_number failed: {e}");
+            return vec![];
+        }
+    };
+    eprintln!("[ASUSHW] Found {count} sensors");
+
+    // Collect sensor metadata
+    let mut sensors = Vec::new();
+    let mut sources = std::collections::HashSet::new();
+
+    for i in 0..count {
+        match conn.asushw_sensor_info(i) {
+            Ok((source, stype, data_type, name)) => {
+                let type_str = match stype {
+                    1 => "temperature",
+                    2 => "fan",
+                    _ => continue, // skip unknown types
+                };
+                let _ = sources.insert(source);
+                sensors.push(AsusHWSensor {
+                    index: i,
+                    name,
+                    sensor_type: type_str.to_string(),
+                    value: 0.0,
+                    source,
+                    data_type,
+                });
+            }
+            Err(e) => eprintln!("[ASUSHW] sensor_get_info({i}) failed: {e}"),
+        }
+    }
+
+    // Update all source buffers
+    for &src in &sources {
+        if let Err(e) = conn.asushw_update_buffer(src) {
+            eprintln!("[ASUSHW] sensor_update_buffer({src}) failed: {e}");
+        }
+    }
+
+    // Read current values
+    for sensor in &mut sensors {
+        match conn.asushw_sensor_value(sensor.index) {
+            Ok(raw) => {
+                sensor.value = if sensor.data_type == 3 {
+                    // Micro-units (e.g. 60_000_000 → 60.0°C)
+                    raw as f32 / 1_000_000.0
+                } else {
+                    raw as f32
+                };
+            }
+            Err(e) => {
+                eprintln!(
+                    "[ASUSHW] sensor_get_value({}) failed: {e}",
+                    sensor.index
+                );
+            }
+        }
+    }
+
+    sensors
 }

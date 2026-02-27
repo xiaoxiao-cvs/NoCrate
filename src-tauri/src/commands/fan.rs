@@ -6,7 +6,9 @@
 use tauri::State;
 
 use crate::state::AppState;
-use crate::wmi::asus_mgmt::{self, DesktopFanPolicy, FanCurve, FanInfo, FanTarget, ThermalProfile};
+use crate::wmi::asus_mgmt::{
+    self, AsusHWSensor, DesktopFanPolicy, FanCurve, FanInfo, FanTarget, ThermalProfile,
+};
 
 /// Get the current RPM for a specific fan header.
 #[tauri::command]
@@ -60,18 +62,12 @@ pub fn get_default_fan_curve(target: FanTarget) -> FanCurve {
 // Desktop-specific commands
 // ---------------------------------------------------------------------------
 
-/// Returns `"desktop"` or `"laptop"` depending on the detected backend.
+/// Returns `"desktop"`, `"laptop"`, or `"asushw"` depending on the detected backend.
 #[tauri::command]
 pub fn get_wmi_backend(state: State<'_, AppState>) -> Result<String, String> {
     state
         .wmi
-        .execute(|conn| {
-            Ok(if asus_mgmt::is_desktop_backend(conn) {
-                "desktop".to_string()
-            } else {
-                "laptop".to_string()
-            })
-        })
+        .execute(|conn| Ok(conn.backend.backend_type().to_string()))
         .map_err(Into::into)
 }
 
@@ -99,5 +95,22 @@ pub fn set_desktop_fan_policy(
     state
         .wmi
         .execute(move |conn| asus_mgmt::set_desktop_fan_policy(conn, &policy))
+        .map_err(Into::into)
+}
+
+// ---------------------------------------------------------------------------
+// ASUSHW sensor commands
+// ---------------------------------------------------------------------------
+
+/// Get all detected ASUSHW sensors (temperatures + fan RPMs).
+///
+/// Only meaningful when the backend is `asushw`.
+#[tauri::command]
+pub fn get_asushw_sensors(
+    state: State<'_, AppState>,
+) -> Result<Vec<AsusHWSensor>, String> {
+    state
+        .wmi
+        .execute(|conn| Ok(asus_mgmt::get_asushw_sensors(conn)))
         .map_err(Into::into)
 }

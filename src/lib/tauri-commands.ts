@@ -7,6 +7,7 @@
 import { invoke } from "@tauri-apps/api/core";
 
 import type {
+  AsusHWSensor,
   DesktopFanPolicy,
   FanCurve,
   FanInfo,
@@ -61,4 +62,11 @@ export async function setDesktopFanPolicy(
   policy: DesktopFanPolicy,
 ): Promise<void> {
   return invoke<void>("set_desktop_fan_policy", { policy });
+}
+
+// ─── ASUSHW sensor commands ──────────────────────────────────
+
+/** Read all ASUSHW sensors (temperatures + fan RPMs). */
+export async function getAsusHWSensors(): Promise<AsusHWSensor[]> {
+  return invoke<AsusHWSensor[]>("get_asushw_sensors");
 }

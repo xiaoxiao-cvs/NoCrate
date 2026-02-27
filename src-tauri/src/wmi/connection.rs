@@ -3,7 +3,7 @@
 /// Manages the lifecycle of the COM connection to the `root\WMI` namespace,
 /// providing access to `IWbemServices` for invoking ASUS WMI methods.
 ///
-/// Supports two ASUS WMI backends:
+/// Supports three ASUS WMI backends:
 ///
 /// - **Laptop** (`ASUSATKWMI_WMNB`): Uses `DSTS` / `DEVS` methods with
 ///   `Device_ID` / `Device_Status` / `Control_Status` parameters.
@@ -11,11 +11,16 @@
 ///
 /// - **Desktop** (`ASUSManagement`): Uses `device_status` / `device_ctrl`
 ///   methods with `device_id` / `ctrl_param` parameters.
-///   Instance path: discovered at runtime via WQL enumeration.
+///   Instance path: discovered at runtime via instance enumeration.
+///
+/// - **ASUSHW** (`ASUSHW`): Sensor-based backend providing read-only access
+///   to temperature and fan RPM data via `sensor_get_*` methods.
+///   Used as fallback when `ASUSManagement` is unavailable.
 use windows::core::BSTR;
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoUninitialize, CLSCTX_INPROC_SERVER,
-    COINIT_MULTITHREADED, EOAC_NONE, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
+    CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoSetProxyBlanket,
+    CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, EOAC_NONE,
+    RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
 };
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::System::Wmi::{
@@ -46,6 +51,9 @@ pub enum AsusWmiBackend {
     /// Desktop motherboard: class `ASUSManagement`, methods
     /// `device_status`/`device_ctrl`.
     Desktop { instance_path: String },
+    /// ASUSHW sensor-based backend (read-only fan RPM & temperatures).
+    /// Uses `sensor_get_*` / `sensor_update_buffer` methods.
+    AsusHW { instance_path: String },
 }
 
 impl AsusWmiBackend {
@@ -54,6 +62,16 @@ impl AsusWmiBackend {
         match self {
             Self::Laptop { .. } => "Laptop (ASUSATKWMI_WMNB)",
             Self::Desktop { .. } => "Desktop (ASUSManagement)",
+            Self::AsusHW { .. } => "Desktop (ASUSHW Sensors)",
+        }
+    }
+
+    /// The raw backend type string for frontend consumption.
+    pub fn backend_type(&self) -> &str {
+        match self {
+            Self::Laptop { .. } => "laptop",
+            Self::Desktop { .. } => "desktop",
+            Self::AsusHW { .. } => "asushw",
         }
     }
 }
@@ -90,7 +108,8 @@ impl WmiConnection {
             // Initialize COM runtime
             CoInitializeEx(None, COINIT_MULTITHREADED).ok()?;
 
-            // Set default security levels
+            // Set default security levels (may fail if already called by
+            // WebView2/Tauri — that's OK, we apply per-proxy security below)
             let _ = CoInitializeSecurity(
                 None,
                 -1,
@@ -117,63 +136,129 @@ impl WmiConnection {
                 &BSTR::new(),
                 None,
             )?;
+            eprintln!("[WMI] Connected to root\\WMI namespace");
+
+            // Set per-proxy security — CRITICAL for WMI calls to succeed
+            // when process-wide CoInitializeSecurity was set by another
+            // component (e.g. WebView2).
+            //   dwauthnsvc   = 10 (RPC_C_AUTHN_WINNT / NTLM)
+            //   dwauthzsvc   = 0  (RPC_C_AUTHZ_NONE)
+            //   principal    = null
+            //   authn level  = RPC_C_AUTHN_LEVEL_CALL
+            //   imp level    = RPC_C_IMP_LEVEL_IMPERSONATE
+            let proxy_result = CoSetProxyBlanket(
+                &services,
+                10, // RPC_C_AUTHN_WINNT
+                0,  // RPC_C_AUTHZ_NONE
+                None,
+                RPC_C_AUTHN_LEVEL_CALL,
+                RPC_C_IMP_LEVEL_IMPERSONATE,
+                None,
+                EOAC_NONE,
+            );
+            if let Err(ref e) = proxy_result {
+                eprintln!("[WMI] CoSetProxyBlanket failed (non-fatal): {e}");
+            }
 
             // Auto-detect backend
             let backend = Self::detect_backend(&services)?;
-            eprintln!("WMI backend detected: {}", backend.label());
+            eprintln!("[WMI] Backend detected: {}", backend.label());
 
             Ok(Self { services, backend })
         }
     }
 
     /// Probe available ASUS WMI classes and return the first working backend.
+    ///
+    /// Detection order:
+    /// 1. `ASUSManagement` (desktop motherboard fan control)
+    /// 2. `ASUSATKWMI_WMNB` (laptop ACPI)
+    /// 3. `ASUSHW` (ASUS hardware sensor monitoring — read-only)
     #[allow(unsafe_code)]
     unsafe fn detect_backend(services: &IWbemServices) -> Result<AsusWmiBackend> {
-        // 1. Try desktop: ASUSManagement (enumerate instances via WQL)
-        if let Ok(path) = Self::find_first_instance(services, "ASUSManagement") {
-            return Ok(AsusWmiBackend::Desktop {
-                instance_path: path,
-            });
+        // 1. Try desktop: ASUSManagement (enumerate instances)
+        eprintln!("[WMI] Probing ASUSManagement …");
+        match Self::find_first_instance(services, "ASUSManagement") {
+            Ok(path) => {
+                eprintln!("[WMI]   ✓ ASUSManagement found: {path}");
+                return Ok(AsusWmiBackend::Desktop {
+                    instance_path: path,
+                });
+            }
+            Err(e) => eprintln!("[WMI]   ✗ ASUSManagement: {e}"),
         }
 
         // 2. Try laptop: ASUSATKWMI_WMNB with common instance path
+        eprintln!("[WMI] Probing ASUSATKWMI_WMNB …");
         let laptop_path = "ASUSATKWMI_WMNB.InstanceName='ACPI\\\\ATK0110\\\\0_0'";
-        // Verify the class exists by trying GetObject on the class name
-        let mut obj = None;
-        let laptop_ok = services
-            .GetObject(
-                &BSTR::from("ASUSATKWMI_WMNB"),
-                WBEM_FLAG_RETURN_WBEM_COMPLETE,
-                None,
-                Some(&mut obj),
-                None,
-            )
-            .is_ok();
-        if laptop_ok && obj.is_some() {
-            return Ok(AsusWmiBackend::Laptop {
-                instance_path: laptop_path.to_string(),
-            });
+        match Self::find_first_instance(services, "ASUSATKWMI_WMNB") {
+            Ok(path) => {
+                eprintln!("[WMI]   ✓ ASUSATKWMI_WMNB found: {path}");
+                return Ok(AsusWmiBackend::Laptop {
+                    instance_path: path,
+                });
+            }
+            Err(e) => {
+                eprintln!("[WMI]   ✗ ASUSATKWMI_WMNB enumerate: {e}");
+                // Fallback: try GetObject on the class definition only
+                let mut obj = None;
+                let ok = services
+                    .GetObject(
+                        &BSTR::from("ASUSATKWMI_WMNB"),
+                        WBEM_FLAG_RETURN_WBEM_COMPLETE,
+                        None,
+                        Some(&mut obj),
+                        None,
+                    )
+                    .is_ok();
+                if ok && obj.is_some() {
+                    eprintln!("[WMI]   ✓ ASUSATKWMI_WMNB class exists (using hardcoded path)");
+                    return Ok(AsusWmiBackend::Laptop {
+                        instance_path: laptop_path.to_string(),
+                    });
+                }
+                eprintln!("[WMI]   ✗ ASUSATKWMI_WMNB class not found");
+            }
+        }
+
+        // 3. Try ASUSHW (sensor-only backend, used by FanControl.AsusWMI)
+        eprintln!("[WMI] Probing ASUSHW …");
+        match Self::find_first_instance(services, "ASUSHW") {
+            Ok(path) => {
+                eprintln!("[WMI]   ✓ ASUSHW found: {path}");
+                return Ok(AsusWmiBackend::AsusHW {
+                    instance_path: path,
+                });
+            }
+            Err(e) => eprintln!("[WMI]   ✗ ASUSHW: {e}"),
         }
 
         Err(NoCrateError::Wmi(
-            "未找到支持的 ASUS WMI 接口 (ASUSATKWMI_WMNB / ASUSManagement)".into(),
+            "未找到支持的 ASUS WMI 接口 (ASUSManagement / ASUSATKWMI_WMNB / ASUSHW)".into(),
         ))
     }
 
-    /// Run a WQL query to find the first instance of a class and return its
-    /// `__RELPATH` (relative object path).
+    /// Enumerate instances of a WMI class using `CreateInstanceEnum`
+    /// (matches .NET `ManagementClass.GetInstances()`) and return the
+    /// `__RELPATH` (relative object path) of the first instance found.
+    ///
+    /// This is more reliable than `ExecQuery` when process-wide COM
+    /// security settings differ from what WQL queries expect.
     #[allow(unsafe_code)]
     unsafe fn find_first_instance(
         services: &IWbemServices,
         class_name: &str,
     ) -> Result<String> {
-        let query = format!("SELECT * FROM {class_name}");
-        let enumerator = services.ExecQuery(
-            &BSTR::from("WQL"),
-            &BSTR::from(query.as_str()),
+        // CreateInstanceEnum is the COM equivalent of .NET GetInstances()
+        let enumerator = services.CreateInstanceEnum(
+            &BSTR::from(class_name),
             WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
             None,
-        )?;
+        ).map_err(|e| {
+            NoCrateError::Wmi(format!(
+                "CreateInstanceEnum failed for {class_name}: {e}"
+            ))
+        })?;
 
         let mut returned: u32 = 0;
         let mut row = [None; 1];
@@ -275,6 +360,7 @@ impl WmiConnection {
     ///
     /// - **Laptop**: calls `DSTS(Device_ID)` → `Device_Status`
     /// - **Desktop**: calls `device_status(device_id)` → `ctrl_param`
+    /// - **AsusHW**: not supported (sensor-only backend)
     pub fn dsts(&self, device_id: u32) -> Result<u32> {
         match &self.backend {
             AsusWmiBackend::Laptop { instance_path } => {
@@ -287,6 +373,9 @@ impl WmiConnection {
                     self.exec_method(instance_path, "device_status", &[("device_id", device_id)])?;
                 Self::get_property_u32(&out, "ctrl_param")
             }
+            AsusWmiBackend::AsusHW { .. } => Err(NoCrateError::Wmi(
+                "ASUSHW 后端不支持 device_status 操作".into(),
+            )),
         }
     }
 
@@ -294,6 +383,7 @@ impl WmiConnection {
     ///
     /// - **Laptop**: calls `DEVS(Device_ID, Control_Status)` → `Device_Status`
     /// - **Desktop**: calls `device_ctrl(device_id, ctrl_param)` → (void)
+    /// - **AsusHW**: not supported (sensor-only backend)
     pub fn devs(&self, device_id: u32, control: u32) -> Result<u32> {
         match &self.backend {
             AsusWmiBackend::Laptop { instance_path } => {
@@ -313,6 +403,9 @@ impl WmiConnection {
                 )?;
                 Ok(1) // Success sentinel (matching laptop convention)
             }
+            AsusWmiBackend::AsusHW { .. } => Err(NoCrateError::Wmi(
+                "ASUSHW 后端不支持 device_ctrl 操作".into(),
+            )),
         }
     }
 
@@ -398,6 +491,66 @@ impl WmiConnection {
                 ))
             })
         }
+    }
+
+    // -----------------------------------------------------------------------
+    // ASUSHW sensor helpers
+    // -----------------------------------------------------------------------
+
+    /// Get the ASUSHW instance path, if the backend is AsusHW.
+    fn asushw_path(&self) -> Result<&str> {
+        match &self.backend {
+            AsusWmiBackend::AsusHW { instance_path } => Ok(instance_path),
+            _ => Err(NoCrateError::Wmi(
+                "当前后端不是 ASUSHW".into(),
+            )),
+        }
+    }
+
+    /// Query the ASUSHW sensor version (`sensor_get_version`).
+    pub fn asushw_sensor_version(&self) -> Result<u32> {
+        let path = self.asushw_path()?;
+        let out = self.exec_method(path, "sensor_get_version", &[])?;
+        Self::get_property_u32(&out, "Data")
+    }
+
+    /// Get the total number of ASUSHW sensors (`sensor_get_number`).
+    pub fn asushw_sensor_count(&self) -> Result<u32> {
+        let path = self.asushw_path()?;
+        let out = self.exec_method(path, "sensor_get_number", &[])?;
+        Self::get_property_u32(&out, "Data")
+    }
+
+    /// Get sensor info for a given index (`sensor_get_info`).
+    ///
+    /// Returns `(source, sensor_type, data_type, name)`:
+    /// - `sensor_type` 1 = temperature, 2 = fan
+    /// - `data_type` 3 = value in micro-units (divide by 1_000_000)
+    pub fn asushw_sensor_info(
+        &self,
+        index: u32,
+    ) -> Result<(u32, u32, u32, String)> {
+        let path = self.asushw_path()?;
+        let out = self.exec_method(path, "sensor_get_info", &[("Index", index)])?;
+        let source = Self::get_property_u32(&out, "Source")?;
+        let sensor_type = Self::get_property_u32(&out, "Type")?;
+        let data_type = Self::get_property_u32(&out, "Data_Type")?;
+        let name = Self::get_property_string(&out, "Name")?;
+        Ok((source, sensor_type, data_type, name))
+    }
+
+    /// Update the sensor buffer for a source group (`sensor_update_buffer`).
+    pub fn asushw_update_buffer(&self, source: u32) -> Result<()> {
+        let path = self.asushw_path()?;
+        let _ = self.exec_method(path, "sensor_update_buffer", &[("Source", source)])?;
+        Ok(())
+    }
+
+    /// Read the current value of a sensor (`sensor_get_value`).
+    pub fn asushw_sensor_value(&self, index: u32) -> Result<u32> {
+        let path = self.asushw_path()?;
+        let out = self.exec_method(path, "sensor_get_value", &[("Index", index)])?;
+        Self::get_property_u32(&out, "Data")
     }
 }
 
