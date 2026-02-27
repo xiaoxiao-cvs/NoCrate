@@ -99,7 +99,7 @@ export const DESKTOP_FAN_NAMES: Record<number, string> = {
 };
 
 /** WMI backend type. */
-export type WmiBackend = "desktop" | "laptop" | "asushw";
+export type WmiBackend = "desktop" | "laptop" | "asushw" | "unavailable";
 
 // ─── ASUSHW Sensor types ─────────────────────────────────────
 

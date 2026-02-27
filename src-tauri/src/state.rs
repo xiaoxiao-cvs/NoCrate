@@ -95,23 +95,33 @@ impl WmiThread {
 ///
 /// Holds shared resources accessible from all commands.
 pub struct AppState {
-    pub wmi: WmiThread,
+    /// WMI thread handle.
+    /// `None` if the WMI connection failed (e.g. no admin or no ASUS drivers).
+    pub wmi: Option<WmiThread>,
     /// AURA controller behind a Mutex (HidDevice is Send but not Sync).
     /// `None` if no controller was found at startup.
     pub aura: Mutex<Option<AuraController>>,
     /// Persistent configuration store.
     pub config: ConfigStore,
+    /// If WMI initialization failed, the error message is stored here
+    /// so the frontend can show a meaningful explanation.
+    pub wmi_error: Option<String>,
 }
 
 impl AppState {
     /// Create a new `AppState` by initializing all subsystems.
     ///
-    /// # Errors
-    ///
-    /// Returns an error if WMI initialization fails.
-    /// AURA discovery failure is non-fatal (stored as `None`).
+    /// WMI and AURA discovery failures are both non-fatal — the app
+    /// launches regardless, with degraded functionality.
     pub fn new(app_data_dir: PathBuf) -> Result<Self> {
-        let wmi = WmiThread::spawn()?;
+        let (wmi, wmi_error) = match WmiThread::spawn() {
+            Ok(w) => (Some(w), None),
+            Err(e) => {
+                eprintln!("Warning: WMI initialization failed: {e}");
+                eprintln!("Fan control features will be unavailable.");
+                (None, Some(e.to_string()))
+            }
+        };
 
         let aura = match AuraController::discover() {
             Ok(ctrl) => {
@@ -130,6 +140,7 @@ impl AppState {
             wmi,
             aura: Mutex::new(aura),
             config,
+            wmi_error,
         })
     }
 }

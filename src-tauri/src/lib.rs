@@ -21,16 +21,15 @@ pub fn run() {
                 .app_data_dir()
                 .expect("failed to resolve app data directory");
 
-            // Initialize WMI connection and application state.
-            // If WMI fails (e.g. no ASUS drivers), we still start the app
-            // but commands will return errors.
+            // Initialize application state.
+            // WMI and AURA failures are non-fatal — the state is always
+            // managed so commands can return clean errors instead of panics.
             match AppState::new(app_data_dir) {
                 Ok(state) => {
                     let _ = app.manage(state);
                 }
                 Err(e) => {
                     eprintln!("Warning: Failed to initialize app state: {e}");
-                    eprintln!("Fan control features will be unavailable.");
                 }
             }
 

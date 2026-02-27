@@ -51,7 +51,7 @@ export default function FanPage() {
   }
 
   // Backend detection failed (e.g. not running as admin)
-  if (backendError) {
+  if (backendError || backend === "unavailable") {
     return (
       <motion.div
         variants={staggerContainer}
@@ -68,9 +68,15 @@ export default function FanPage() {
         <motion.div
           variants={staggerItem}
           transition={spring.soft}
-          className="rounded-lg border border-destructive/30 bg-destructive/10 px-4 py-3 text-sm text-destructive"
+          className="rounded-lg border border-border bg-card px-4 py-8 text-center text-sm text-muted-foreground"
         >
-          无法连接 WMI 接口，风扇控制不可用。请以管理员权限重新启动应用。
+          <p>未检测到 ASUS WMI 接口，风扇控制不可用。</p>
+          <p className="mt-2 text-xs">
+            请以管理员权限重新启动应用，或确认已安装 ASUS 主板驱动。
+          </p>
+          {backendError && (
+            <p className="mt-2 font-mono text-xs text-destructive">{backendError}</p>
+          )}
         </motion.div>
       </motion.div>
     );
@@ -86,7 +92,7 @@ export default function FanPage() {
 // ===========================================================================
 
 function DesktopFanView() {
-  const { policies, loading, error, updatePolicy } = useDesktopFanData();
+  const { policies, fanSpeeds, loading, error, updatePolicy } = useDesktopFanData();
 
   if (loading) {
     return (
@@ -142,6 +148,7 @@ function DesktopFanView() {
             <DesktopFanPolicyCard
               key={p.fan_type}
               policy={p}
+              fanSpeeds={fanSpeeds}
               onUpdate={updatePolicy}
             />
           ))}

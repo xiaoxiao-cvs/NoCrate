@@ -10,31 +10,38 @@ use crate::wmi::asus_mgmt::{
     self, AsusHWSensor, DesktopFanPolicy, FanCurve, FanInfo, FanTarget, ThermalProfile,
 };
 
+/// Helper: get a reference to the WmiThread or return an error string.
+fn with_wmi<F, T>(state: &State<'_, AppState>, f: F) -> Result<T, String>
+where
+    F: FnOnce(&crate::wmi::connection::WmiConnection) -> crate::error::Result<T> + Send + 'static,
+    T: Send + 'static,
+{
+    let wmi = state.wmi.as_ref().ok_or_else(|| {
+        state
+            .wmi_error
+            .as_deref()
+            .unwrap_or("WMI 未初始化")
+            .to_string()
+    })?;
+    wmi.execute(f).map_err(Into::into)
+}
+
 /// Get the current RPM for a specific fan header.
 #[tauri::command]
 pub fn get_fan_speed(state: State<'_, AppState>, target: FanTarget) -> Result<u32, String> {
-    state
-        .wmi
-        .execute(move |conn| asus_mgmt::get_fan_speed(conn, target))
-        .map_err(Into::into)
+    with_wmi(&state, move |conn| asus_mgmt::get_fan_speed(conn, target))
 }
 
 /// Get RPM readings for every detected fan header.
 #[tauri::command]
 pub fn get_all_fan_speeds(state: State<'_, AppState>) -> Result<Vec<FanInfo>, String> {
-    state
-        .wmi
-        .execute(|conn| Ok(asus_mgmt::get_all_fan_speeds(conn)))
-        .map_err(Into::into)
+    with_wmi(&state, |conn| Ok(asus_mgmt::get_all_fan_speeds(conn)))
 }
 
 /// Get the currently active thermal profile.
 #[tauri::command]
 pub fn get_thermal_profile(state: State<'_, AppState>) -> Result<ThermalProfile, String> {
-    state
-        .wmi
-        .execute(|conn| asus_mgmt::get_thermal_profile(conn))
-        .map_err(Into::into)
+    with_wmi(&state, |conn| asus_mgmt::get_thermal_profile(conn))
 }
 
 /// Set the thermal profile (Standard / Performance / Silent).
@@ -43,10 +50,9 @@ pub fn set_thermal_profile(
     state: State<'_, AppState>,
     profile: ThermalProfile,
 ) -> Result<(), String> {
-    state
-        .wmi
-        .execute(move |conn| asus_mgmt::set_thermal_profile(conn, profile))
-        .map_err(Into::into)
+    with_wmi(&state, move |conn| {
+        asus_mgmt::set_thermal_profile(conn, profile)
+    })
 }
 
 /// Get a sensible default fan curve for a given target.
@@ -62,13 +68,15 @@ pub fn get_default_fan_curve(target: FanTarget) -> FanCurve {
 // Desktop-specific commands
 // ---------------------------------------------------------------------------
 
-/// Returns `"desktop"`, `"laptop"`, or `"asushw"` depending on the detected backend.
+/// Returns `"desktop"`, `"laptop"`, `"asushw"`, or `"unavailable"` depending on the detected backend.
 #[tauri::command]
 pub fn get_wmi_backend(state: State<'_, AppState>) -> Result<String, String> {
-    state
-        .wmi
-        .execute(|conn| Ok(conn.backend.backend_type().to_string()))
-        .map_err(Into::into)
+    match &state.wmi {
+        Some(wmi) => wmi
+            .execute(|conn| Ok(conn.backend.backend_type().to_string()))
+            .map_err(Into::into),
+        None => Ok("unavailable".to_string()),
+    }
 }
 
 /// Get fan policies for all present desktop fan headers.
@@ -78,10 +86,9 @@ pub fn get_wmi_backend(state: State<'_, AppState>) -> Result<String, String> {
 pub fn get_desktop_fan_policies(
     state: State<'_, AppState>,
 ) -> Result<Vec<DesktopFanPolicy>, String> {
-    state
-        .wmi
-        .execute(|conn| Ok(asus_mgmt::get_all_desktop_fan_policies(conn)))
-        .map_err(Into::into)
+    with_wmi(&state, |conn| {
+        Ok(asus_mgmt::get_all_desktop_fan_policies(conn))
+    })
 }
 
 /// Update a single desktop fan header's policy.
@@ -92,10 +99,9 @@ pub fn set_desktop_fan_policy(
     state: State<'_, AppState>,
     policy: DesktopFanPolicy,
 ) -> Result<(), String> {
-    state
-        .wmi
-        .execute(move |conn| asus_mgmt::set_desktop_fan_policy(conn, &policy))
-        .map_err(Into::into)
+    with_wmi(&state, move |conn| {
+        asus_mgmt::set_desktop_fan_policy(conn, &policy)
+    })
 }
 
 // ---------------------------------------------------------------------------
@@ -106,11 +112,6 @@ pub fn set_desktop_fan_policy(
 ///
 /// Only meaningful when the backend is `asushw`.
 #[tauri::command]
-pub fn get_asushw_sensors(
-    state: State<'_, AppState>,
-) -> Result<Vec<AsusHWSensor>, String> {
-    state
-        .wmi
-        .execute(|conn| Ok(asus_mgmt::get_asushw_sensors(conn)))
-        .map_err(Into::into)
+pub fn get_asushw_sensors(state: State<'_, AppState>) -> Result<Vec<AsusHWSensor>, String> {
+    with_wmi(&state, |conn| Ok(asus_mgmt::get_asushw_sensors(conn)))
 }

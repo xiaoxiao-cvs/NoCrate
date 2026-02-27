@@ -115,6 +115,7 @@ impl FanTarget {
 
     /// Device ID for this fan's curve data.
     #[must_use]
+    #[allow(dead_code)]
     pub const fn curve_device_id(self) -> u32 {
         match self {
             Self::Cpu => device_id::CPU_FAN_CURVE,
@@ -141,6 +142,7 @@ pub enum ThermalProfile {
 
 impl ThermalProfile {
     /// All profiles, handy for iteration / UI.
+    #[allow(dead_code)]
     pub const ALL: [Self; 3] = [Self::Standard, Self::Performance, Self::Silent];
 
     /// Convert to the raw DEVS control value.
@@ -348,6 +350,7 @@ pub enum DesktopFanProfile {
 }
 
 impl DesktopFanProfile {
+    #[allow(dead_code)]
     fn from_wmi(s: &str) -> Self {
         match s.to_uppercase().as_str() {
             "MANUAL" => Self::Manual,
@@ -382,6 +385,7 @@ pub struct DesktopFanPolicy {
 }
 
 /// Friendly display names for desktop fan headers.
+#[allow(dead_code)]
 const DESKTOP_FAN_NAMES: [&str; 8] = [
     "CPU Fan",
     "Chassis Fan 1",
@@ -394,6 +398,7 @@ const DESKTOP_FAN_NAMES: [&str; 8] = [
 ];
 
 /// Get the display name for a desktop fan header index.
+#[allow(dead_code)]
 pub fn desktop_fan_name(fan_type: u8) -> &'static str {
     DESKTOP_FAN_NAMES
         .get(fan_type as usize)
@@ -494,6 +499,7 @@ pub fn set_desktop_fan_policy(conn: &WmiConnection, policy: &DesktopFanPolicy) -
 // ---------------------------------------------------------------------------
 
 /// Returns `true` if the current WMI connection uses the desktop backend.
+#[allow(dead_code)]
 pub fn is_desktop_backend(conn: &WmiConnection) -> bool {
     matches!(conn.backend, AsusWmiBackend::Desktop { .. })
 }
@@ -578,10 +584,7 @@ pub fn get_asushw_sensors(conn: &WmiConnection) -> Vec<AsusHWSensor> {
                 };
             }
             Err(e) => {
-                eprintln!(
-                    "[ASUSHW] sensor_get_value({}) failed: {e}",
-                    sensor.index
-                );
+                eprintln!("[ASUSHW] sensor_get_value({}) failed: {e}", sensor.index);
             }
         }
     }

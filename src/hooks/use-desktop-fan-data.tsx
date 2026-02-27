@@ -1,23 +1,26 @@
 /**
- * Hook for polling desktop fan policies from the backend.
+ * Hook for polling desktop fan policies and live RPM from the backend.
  *
- * Desktop motherboards use `GetFanPolicy` / `SetFanPolicy` instead of
- * the laptop-style DSTS/DEVS RPM readings + three-mode thermal profiles.
+ * Desktop motherboards use `GetFanPolicy` / `SetFanPolicy` for control,
+ * plus `device_status` (via get_all_fan_speeds) for live RPM readings.
  */
 import { useCallback, useEffect, useRef, useState } from "react";
 
 import {
+  getAllFanSpeeds,
   getDesktopFanPolicies,
   setDesktopFanPolicy as invokeSetPolicy,
 } from "@/lib/tauri-commands";
-import type { DesktopFanPolicy } from "@/lib/types";
+import type { DesktopFanPolicy, FanInfo } from "@/lib/types";
 
 /** Polling interval in milliseconds. */
-const POLL_INTERVAL_MS = 3_000;
+const POLL_INTERVAL_MS = 2_000;
 
 export interface UseDesktopFanDataReturn {
   /** Current fan policies. Empty array until first fetch. */
   policies: DesktopFanPolicy[];
+  /** Live RPM readings from device_status. */
+  fanSpeeds: FanInfo[];
   /** True until the first successful fetch. */
   loading: boolean;
   /** Human-readable error string, or `null`. */
@@ -30,15 +33,20 @@ export interface UseDesktopFanDataReturn {
 
 export function useDesktopFanData(): UseDesktopFanDataReturn {
   const [policies, setPolicies] = useState<DesktopFanPolicy[]>([]);
+  const [fanSpeeds, setFanSpeeds] = useState<FanInfo[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const mountedRef = useRef(true);
 
   const refresh = useCallback(async () => {
     try {
-      const data = await getDesktopFanPolicies();
+      const [policyData, speedData] = await Promise.all([
+        getDesktopFanPolicies(),
+        getAllFanSpeeds().catch(() => [] as FanInfo[]),
+      ]);
       if (!mountedRef.current) return;
-      setPolicies(data);
+      setPolicies(policyData);
+      setFanSpeeds(speedData);
       setError(null);
     } catch (e) {
       if (!mountedRef.current) return;
@@ -74,5 +82,5 @@ export function useDesktopFanData(): UseDesktopFanDataReturn {
     [refresh],
   );
 
-  return { policies, loading, error, refresh, updatePolicy };
+  return { policies, fanSpeeds, loading, error, refresh, updatePolicy };
 }

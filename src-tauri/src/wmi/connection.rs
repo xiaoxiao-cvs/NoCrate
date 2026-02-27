@@ -508,6 +508,7 @@ impl WmiConnection {
     }
 
     /// Query the ASUSHW sensor version (`sensor_get_version`).
+    #[allow(dead_code)]
     pub fn asushw_sensor_version(&self) -> Result<u32> {
         let path = self.asushw_path()?;
         let out = self.exec_method(path, "sensor_get_version", &[])?;

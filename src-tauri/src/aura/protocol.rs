@@ -38,6 +38,7 @@ pub const CMD_SET_EFFECT: u8 = 0x35;
 pub const CMD_DIRECT: u8 = 0x36;
 
 /// Query firmware version.
+#[allow(dead_code)]
 pub const CMD_FIRMWARE: u8 = 0xB0;
 
 /// Maximum LEDs addressable in a single direct-mode packet.
@@ -68,6 +69,7 @@ pub enum AuraEffect {
 
 impl AuraEffect {
     /// All effects, useful for UI enumeration.
+    #[allow(dead_code)]
     pub const ALL: [Self; 6] = [
         Self::Off,
         Self::Static,
@@ -92,6 +94,7 @@ impl AuraEffect {
 
     /// Parse from a raw protocol byte.
     #[must_use]
+    #[allow(dead_code)]
     pub fn from_raw(v: u8) -> Option<Self> {
         match v {
             0x00 => Some(Self::Off),
@@ -137,6 +140,7 @@ pub struct RgbColor {
 
 impl RgbColor {
     pub const BLACK: Self = Self { r: 0, g: 0, b: 0 };
+    #[allow(dead_code)]
     pub const WHITE: Self = Self {
         r: 255,
         g: 255,
@@ -144,6 +148,7 @@ impl RgbColor {
     };
 
     #[must_use]
+    #[allow(dead_code)]
     pub const fn new(r: u8, g: u8, b: u8) -> Self {
         Self { r, g, b }
     }
@@ -208,6 +213,7 @@ pub fn build_direct(start_led: u8, colors: &[RgbColor]) -> [u8; REPORT_SIZE] {
 
 /// Build a firmware-query report.
 #[must_use]
+#[allow(dead_code)]
 pub fn build_firmware_query() -> [u8; REPORT_SIZE] {
     build_report(CMD_FIRMWARE, &[])
 }

@@ -32,6 +32,7 @@ pub struct AuraController {
 
 // HidDevice is Send but not Sync. We protect access with a Mutex
 // in AppState, so this is safe.
+#[allow(unsafe_code)]
 unsafe impl Sync for AuraController {}
 
 impl AuraController {
@@ -128,7 +129,7 @@ impl AuraController {
     // ── Internal I/O ─────────────────────────────────────────
 
     fn write(&self, report: &[u8]) -> Result<()> {
-        self.device
+        let _ = self.device
             .write(report)
             .map_err(|e| NoCrateError::Hid(format!("HID write failed: {e}")))?;
         Ok(())
