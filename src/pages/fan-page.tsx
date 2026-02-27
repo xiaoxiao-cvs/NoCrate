@@ -92,7 +92,10 @@ export default function FanPage() {
 // ===========================================================================
 
 function DesktopFanView() {
-  const { policies, fanSpeeds, loading, error, updatePolicy } = useDesktopFanData();
+  const { policies, sioData, loading, error, updatePolicy } = useDesktopFanData();
+
+  const sioFans = sioData?.fans ?? [];
+  const sioTemps = sioData?.temps ?? [];
 
   if (loading) {
     return (
@@ -148,7 +151,7 @@ function DesktopFanView() {
             <DesktopFanPolicyCard
               key={p.fan_type}
               policy={p}
-              fanSpeeds={fanSpeeds}
+              sioFans={sioFans}
               onUpdate={updatePolicy}
             />
           ))}
@@ -160,6 +163,50 @@ function DesktopFanView() {
               <p className="text-center text-sm text-muted-foreground">
                 未检测到风扇接口。请确认以管理员权限运行且 ASUS WMI 驱动已安装。
               </p>
+            </CardContent>
+          </Card>
+        </motion.div>
+      )}
+
+      {/* ── SIO 温度传感器 ──────────────────────────────────── */}
+      {sioTemps.length > 0 && (
+        <motion.div variants={staggerItem} transition={spring.soft}>
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Thermometer className="h-4 w-4" />
+                温度
+                {sioData?.chip_name && (
+                  <span className="ml-auto text-xs font-normal text-muted-foreground">
+                    {sioData.chip_name}
+                  </span>
+                )}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                {sioTemps.map((t) => (
+                  <div
+                    key={t.channel}
+                    className="flex items-center justify-between rounded-lg border px-4 py-3"
+                  >
+                    <span className="text-sm text-muted-foreground">
+                      {t.name}
+                    </span>
+                    <span
+                      className={`text-lg font-semibold tabular-nums ${
+                        t.temp_c >= 80
+                          ? "text-destructive"
+                          : t.temp_c >= 60
+                            ? "text-amber-500"
+                            : "text-emerald-500"
+                      }`}
+                    >
+                      {t.temp_c.toFixed(1)}°C
+                    </span>
+                  </div>
+                ))}
+              </div>
             </CardContent>
           </Card>
         </motion.div>

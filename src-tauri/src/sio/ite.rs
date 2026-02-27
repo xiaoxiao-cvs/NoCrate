@@ -57,23 +57,65 @@ struct IteTempChannel {
 
 /// ITE 5 路风扇（IT8689E 最多 6 路，常见板子用 5 路）
 const FAN_CHANNELS: &[IteFanChannel] = &[
-    IteFanChannel { name: "CPU Fan",  count_low_reg: 0x0D, count_high_reg: 0x18, channel: 0 }, // FAN1
-    IteFanChannel { name: "机箱 #1",  count_low_reg: 0x0E, count_high_reg: 0x19, channel: 1 }, // FAN2
-    IteFanChannel { name: "机箱 #2",  count_low_reg: 0x0F, count_high_reg: 0x1A, channel: 2 }, // FAN3
-    IteFanChannel { name: "机箱 #3",  count_low_reg: 0x80, count_high_reg: 0x81, channel: 3 }, // FAN4
-    IteFanChannel { name: "机箱 #4",  count_low_reg: 0x82, count_high_reg: 0x83, channel: 4 }, // FAN5
+    IteFanChannel {
+        name: "CPU Fan",
+        count_low_reg: 0x0D,
+        count_high_reg: 0x18,
+        channel: 0,
+    }, // FAN1
+    IteFanChannel {
+        name: "机箱 #1",
+        count_low_reg: 0x0E,
+        count_high_reg: 0x19,
+        channel: 1,
+    }, // FAN2
+    IteFanChannel {
+        name: "机箱 #2",
+        count_low_reg: 0x0F,
+        count_high_reg: 0x1A,
+        channel: 2,
+    }, // FAN3
+    IteFanChannel {
+        name: "机箱 #3",
+        count_low_reg: 0x80,
+        count_high_reg: 0x81,
+        channel: 3,
+    }, // FAN4
+    IteFanChannel {
+        name: "机箱 #4",
+        count_low_reg: 0x82,
+        count_high_reg: 0x83,
+        channel: 4,
+    }, // FAN5
 ];
 
 /// 扩展风扇通道（IT8689E 第 6 路，较少见）
 const FAN_CHANNELS_EXT: &[IteFanChannel] = &[
-    IteFanChannel { name: "机箱 #5",  count_low_reg: 0x84, count_high_reg: 0x85, channel: 5 }, // FAN6
+    IteFanChannel {
+        name: "机箱 #5",
+        count_low_reg: 0x84,
+        count_high_reg: 0x85,
+        channel: 5,
+    }, // FAN6
 ];
 
 /// ITE 温度通道
 const TEMP_CHANNELS: &[IteTempChannel] = &[
-    IteTempChannel { name: "CPU",  reg: 0x29, channel: 0 }, // TMPIN1
-    IteTempChannel { name: "主板", reg: 0x2A, channel: 1 }, // TMPIN2
-    IteTempChannel { name: "辅助", reg: 0x2B, channel: 2 }, // TMPIN3
+    IteTempChannel {
+        name: "CPU",
+        reg: 0x29,
+        channel: 0,
+    }, // TMPIN1
+    IteTempChannel {
+        name: "主板",
+        reg: 0x2A,
+        channel: 1,
+    }, // TMPIN2
+    IteTempChannel {
+        name: "辅助",
+        reg: 0x2B,
+        channel: 2,
+    }, // TMPIN3
 ];
 
 impl Chip for IteChip {

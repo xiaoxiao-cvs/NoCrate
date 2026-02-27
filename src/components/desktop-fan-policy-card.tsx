@@ -8,12 +8,12 @@ import { motion } from "motion/react";
 import { Fan, Gauge, Thermometer, Zap } from "lucide-react";
 
 import { cn } from "@/lib/utils";
-import { DESKTOP_FAN_NAMES, type DesktopFanPolicy, type FanInfo } from "@/lib/types";
+import { DESKTOP_FAN_NAMES, type DesktopFanPolicy, type SioFanReading } from "@/lib/types";
 
 export interface DesktopFanPolicyCardProps {
   policy: DesktopFanPolicy;
-  /** Live RPM readings from get_all_fan_speeds. */
-  fanSpeeds: FanInfo[];
+  /** Super I/O 风扇转速读数 */
+  sioFans: SioFanReading[];
   onUpdate: (policy: DesktopFanPolicy) => void;
 }
 
@@ -29,19 +29,15 @@ const PROFILE_OPTIONS = [
 
 export function DesktopFanPolicyCard({
   policy,
-  fanSpeeds,
+  sioFans,
   onUpdate,
 }: DesktopFanPolicyCardProps) {
   const fanName =
     DESKTOP_FAN_NAMES[policy.fan_type] ?? `风扇 ${policy.fan_type}`;
 
-  // Map fan_type index to FanTarget for RPM lookup
-  // fan_type 0 = cpu, 1 = gpu (chassis 1), 2 = mid (chassis 2)
-  const targetMap: Record<number, string> = { 0: "cpu", 1: "gpu", 2: "mid" };
-  const targetKey = targetMap[policy.fan_type];
-  const rpmInfo = targetKey
-    ? fanSpeeds.find((f) => f.target === targetKey)
-    : undefined;
+  // 根据 fan_type 索引在 SIO 风扇列表中查找对应通道的 RPM
+  // SIO 通道 0=CPU Fan, 1-6=机箱风扇 1-6，与 policy.fan_type 对齐
+  const rpmReading = sioFans.find((f) => f.channel === policy.fan_type);
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -49,20 +45,20 @@ export function DesktopFanPolicyCard({
       <div className="flex items-center gap-2">
         <Fan className="h-4 w-4 text-primary" />
         <span className="font-medium text-foreground">{fanName}</span>
-        {rpmInfo !== undefined && (
+        {rpmReading !== undefined && (
           <span className="ml-auto flex items-center gap-1 text-sm font-mono tabular-nums text-foreground">
             <motion.span
-              key={rpmInfo.rpm}
+              key={rpmReading.rpm}
               initial={{ opacity: 0.4, y: -4 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.2 }}
             >
-              {rpmInfo.rpm.toLocaleString()}
+              {rpmReading.rpm.toLocaleString()}
             </motion.span>
             <span className="text-xs text-muted-foreground">RPM</span>
           </span>
         )}
-        {rpmInfo === undefined && (
+        {rpmReading === undefined && (
           <span className="ml-auto text-xs text-muted-foreground">
             #{policy.fan_type}
           </span>

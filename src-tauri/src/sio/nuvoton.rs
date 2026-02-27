@@ -68,25 +68,102 @@ struct TempChannel {
 
 /// NCT67xx 系列 7 路风扇通道（Bank 4 寄存器）
 const FAN_CHANNELS: &[FanChannel] = &[
-    FanChannel { name: "CPU Fan",     count_high_reg: 0xC0, count_low_reg: 0xC1, channel: 0 }, // SYSFANIN
-    FanChannel { name: "机箱 #1",     count_high_reg: 0xC2, count_low_reg: 0xC3, channel: 1 }, // CPUFANIN
-    FanChannel { name: "机箱 #2",     count_high_reg: 0xC4, count_low_reg: 0xC5, channel: 2 }, // AUXFANIN0
-    FanChannel { name: "机箱 #3",     count_high_reg: 0xC6, count_low_reg: 0xC7, channel: 3 }, // AUXFANIN1
-    FanChannel { name: "机箱 #4",     count_high_reg: 0xC8, count_low_reg: 0xC9, channel: 4 }, // AUXFANIN2
-    FanChannel { name: "机箱 #5",     count_high_reg: 0xCA, count_low_reg: 0xCB, channel: 5 }, // AUXFANIN3
-    FanChannel { name: "机箱 #6",     count_high_reg: 0xCC, count_low_reg: 0xCD, channel: 6 }, // AUXFANIN4
+    FanChannel {
+        name: "CPU Fan",
+        count_high_reg: 0xC0,
+        count_low_reg: 0xC1,
+        channel: 0,
+    }, // SYSFANIN
+    FanChannel {
+        name: "机箱 #1",
+        count_high_reg: 0xC2,
+        count_low_reg: 0xC3,
+        channel: 1,
+    }, // CPUFANIN
+    FanChannel {
+        name: "机箱 #2",
+        count_high_reg: 0xC4,
+        count_low_reg: 0xC5,
+        channel: 2,
+    }, // AUXFANIN0
+    FanChannel {
+        name: "机箱 #3",
+        count_high_reg: 0xC6,
+        count_low_reg: 0xC7,
+        channel: 3,
+    }, // AUXFANIN1
+    FanChannel {
+        name: "机箱 #4",
+        count_high_reg: 0xC8,
+        count_low_reg: 0xC9,
+        channel: 4,
+    }, // AUXFANIN2
+    FanChannel {
+        name: "机箱 #5",
+        count_high_reg: 0xCA,
+        count_low_reg: 0xCB,
+        channel: 5,
+    }, // AUXFANIN3
+    FanChannel {
+        name: "机箱 #6",
+        count_high_reg: 0xCC,
+        count_low_reg: 0xCD,
+        channel: 6,
+    }, // AUXFANIN4
 ];
 
 /// NCT67xx 系列温度通道
 /// Bank 0: SYSTIN / CPUTIN (传统)
 /// Bank 7: PECI / TSI (AMD) 等新增通道
 const TEMP_CHANNELS: &[TempChannel] = &[
-    TempChannel { name: "主板",   bank: 0, int_reg: 0x73, frac_bank: 0, frac_reg: 0x74, channel: 0 }, // SYSTIN
-    TempChannel { name: "CPU",    bank: 0, int_reg: 0x75, frac_bank: 0, frac_reg: 0x76, channel: 1 }, // CPUTIN
-    TempChannel { name: "辅助",   bank: 0, int_reg: 0x77, frac_bank: 0, frac_reg: 0x78, channel: 2 }, // AUXTIN0
-    TempChannel { name: "辅助 1", bank: 1, int_reg: 0x50, frac_bank: 1, frac_reg: 0x51, channel: 3 }, // AUXTIN1
-    TempChannel { name: "辅助 2", bank: 2, int_reg: 0x50, frac_bank: 2, frac_reg: 0x51, channel: 4 }, // AUXTIN2
-    TempChannel { name: "辅助 3", bank: 6, int_reg: 0x50, frac_bank: 6, frac_reg: 0x51, channel: 5 }, // AUXTIN3
+    TempChannel {
+        name: "主板",
+        bank: 0,
+        int_reg: 0x73,
+        frac_bank: 0,
+        frac_reg: 0x74,
+        channel: 0,
+    }, // SYSTIN
+    TempChannel {
+        name: "CPU",
+        bank: 0,
+        int_reg: 0x75,
+        frac_bank: 0,
+        frac_reg: 0x76,
+        channel: 1,
+    }, // CPUTIN
+    TempChannel {
+        name: "辅助",
+        bank: 0,
+        int_reg: 0x77,
+        frac_bank: 0,
+        frac_reg: 0x78,
+        channel: 2,
+    }, // AUXTIN0
+    TempChannel {
+        name: "辅助 1",
+        bank: 1,
+        int_reg: 0x50,
+        frac_bank: 1,
+        frac_reg: 0x51,
+        channel: 3,
+    }, // AUXTIN1
+    TempChannel {
+        name: "辅助 2",
+        bank: 2,
+        int_reg: 0x50,
+        frac_bank: 2,
+        frac_reg: 0x51,
+        channel: 4,
+    }, // AUXTIN2
+    TempChannel {
+        name: "辅助 3",
+        bank: 6,
+        int_reg: 0x50,
+        frac_bank: 6,
+        frac_reg: 0x51,
+        channel: 5,
+    }, // AUXTIN3
 ];
 
 impl Chip for NuvotonChip {

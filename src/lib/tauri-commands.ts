@@ -12,6 +12,8 @@ import type {
   FanCurve,
   FanInfo,
   FanTarget,
+  SioSnapshot,
+  SioStatus,
   ThermalProfile,
   WmiBackend,
 } from "@/lib/types";
@@ -69,4 +71,16 @@ export async function setDesktopFanPolicy(
 /** Read all ASUSHW sensors (temperatures + fan RPMs). */
 export async function getAsusHWSensors(): Promise<AsusHWSensor[]> {
   return invoke<AsusHWSensor[]>("get_asushw_sensors");
+}
+
+// ─── Super I/O 传感器命令 ────────────────────────────────────
+
+/** 读取 Super I/O 芯片的所有风扇转速与温度传感器 */
+export async function getSioSensors(): Promise<SioSnapshot> {
+  return invoke<SioSnapshot>("get_sio_sensors");
+}
+
+/** 获取 Super I/O 模块状态（芯片型号、是否可用等） */
+export async function getSioStatus(): Promise<SioStatus> {
+  return invoke<SioStatus>("get_sio_status");
 }

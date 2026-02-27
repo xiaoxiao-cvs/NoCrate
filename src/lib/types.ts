@@ -114,3 +114,33 @@ export interface AsusHWSensor {
   source: number;
   data_type: number;
 }
+
+// ─── Super I/O 传感器类型 ────────────────────────────────────
+
+/** Super I/O 单个风扇通道的转速读数 */
+export interface SioFanReading {
+  name: string;
+  rpm: number;
+  channel: number;
+}
+
+/** Super I/O 单个温度通道的读数 */
+export interface SioTempReading {
+  name: string;
+  temp_c: number;
+  channel: number;
+}
+
+/** Super I/O 一次完整采样快照 */
+export interface SioSnapshot {
+  fans: SioFanReading[];
+  temps: SioTempReading[];
+  chip_name: string;
+}
+
+/** Super I/O 模块状态信息 */
+export interface SioStatus {
+  available: boolean;
+  chip_name: string | null;
+  error: string | null;
+}
