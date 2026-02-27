@@ -18,14 +18,14 @@
 ///   Used as fallback when `ASUSManagement` is unavailable.
 use windows::core::BSTR;
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoSetProxyBlanket,
-    CoUninitialize, CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, EOAC_NONE,
-    RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
+    CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoSetProxyBlanket, CoUninitialize,
+    CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, EOAC_NONE, RPC_C_AUTHN_LEVEL_CALL,
+    RPC_C_IMP_LEVEL_IMPERSONATE,
 };
-use windows::Win32::System::Variant::VARIANT;
+use windows::Win32::System::Variant::{VariantChangeType, VARIANT, VAR_CHANGE_FLAGS, VT_I4};
 use windows::Win32::System::Wmi::{
-    IWbemClassObject, IWbemLocator, IWbemServices, WbemLocator,
-    WBEM_FLAG_FORWARD_ONLY, WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_FLAG_RETURN_WBEM_COMPLETE,
+    IWbemClassObject, IWbemLocator, IWbemServices, WbemLocator, WBEM_FLAG_FORWARD_ONLY,
+    WBEM_FLAG_RETURN_IMMEDIATELY, WBEM_FLAG_RETURN_WBEM_COMPLETE,
 };
 
 use crate::error::{NoCrateError, Result};
@@ -245,20 +245,17 @@ impl WmiConnection {
     /// This is more reliable than `ExecQuery` when process-wide COM
     /// security settings differ from what WQL queries expect.
     #[allow(unsafe_code)]
-    unsafe fn find_first_instance(
-        services: &IWbemServices,
-        class_name: &str,
-    ) -> Result<String> {
+    unsafe fn find_first_instance(services: &IWbemServices, class_name: &str) -> Result<String> {
         // CreateInstanceEnum is the COM equivalent of .NET GetInstances()
-        let enumerator = services.CreateInstanceEnum(
-            &BSTR::from(class_name),
-            WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
-            None,
-        ).map_err(|e| {
-            NoCrateError::Wmi(format!(
-                "CreateInstanceEnum failed for {class_name}: {e}"
-            ))
-        })?;
+        let enumerator = services
+            .CreateInstanceEnum(
+                &BSTR::from(class_name),
+                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                None,
+            )
+            .map_err(|e| {
+                NoCrateError::Wmi(format!("CreateInstanceEnum failed for {class_name}: {e}"))
+            })?;
 
         let mut returned: u32 = 0;
         let mut row = [None; 1];
@@ -364,8 +361,7 @@ impl WmiConnection {
     pub fn dsts(&self, device_id: u32) -> Result<u32> {
         match &self.backend {
             AsusWmiBackend::Laptop { instance_path } => {
-                let out =
-                    self.exec_method(instance_path, "DSTS", &[("Device_ID", device_id)])?;
+                let out = self.exec_method(instance_path, "DSTS", &[("Device_ID", device_id)])?;
                 Self::get_property_u32(&out, "Device_Status")
             }
             AsusWmiBackend::Desktop { instance_path } => {
@@ -410,16 +406,29 @@ impl WmiConnection {
     }
 
     /// Read a u32 value from a WMI class object property.
+    ///
+    /// Handles multiple VARIANT types (VT_UI1, VT_I2, VT_UI2, VT_I4, VT_UI4)
+    /// by coercing to VT_I4 before extraction when direct i32 extraction fails.
     #[allow(unsafe_code)]
     pub fn get_property_u32(obj: &IWbemClassObject, name: &str) -> Result<u32> {
         unsafe {
             let mut val = VARIANT::default();
             obj.Get(&BSTR::from(name), 0, &mut val, None, None)?;
 
-            // Extract i4 (i32) from variant and cast to u32
-            let i4: i32 = (&val).try_into().map_err(|_| {
-                NoCrateError::Wmi(format!("Property {name} is not an i4/u32 value"))
-            })?;
+            // 先尝试直接 i32 转换（最常见的 VT_I4 类型）
+            if let Ok(i4) = i32::try_from(&val) {
+                return Ok(i4 as u32);
+            }
+
+            // 对于其他数值类型 (VT_UI1, VT_I2, VT_UI2, VT_UI4 等)，
+            // 使用 VariantChangeType 强制转换为 VT_I4
+            let mut coerced = VARIANT::default();
+            VariantChangeType(&mut coerced, &val, VAR_CHANGE_FLAGS(0), VT_I4)
+                .map_err(|e| NoCrateError::Wmi(format!("属性 {name} 无法转换为数值类型: {e}")))?;
+
+            let i4: i32 = (&coerced)
+                .try_into()
+                .map_err(|_| NoCrateError::Wmi(format!("属性 {name} 转换后仍非 i32")))?;
             Ok(i4 as u32)
         }
     }
@@ -431,9 +440,9 @@ impl WmiConnection {
             let mut val = VARIANT::default();
             obj.Get(&BSTR::from(name), 0, &mut val, None, None)?;
 
-            let bstr: BSTR = (&val).try_into().map_err(|_| {
-                NoCrateError::Wmi(format!("Property {name} is not a string value"))
-            })?;
+            let bstr: BSTR = (&val)
+                .try_into()
+                .map_err(|_| NoCrateError::Wmi(format!("Property {name} is not a string value")))?;
             Ok(bstr.to_string())
         }
     }
@@ -486,9 +495,7 @@ impl WmiConnection {
             )?;
 
             out_params.ok_or_else(|| {
-                NoCrateError::Wmi(format!(
-                    "ExecMethod returned no output for {method_name}"
-                ))
+                NoCrateError::Wmi(format!("ExecMethod returned no output for {method_name}"))
             })
         }
     }
@@ -501,9 +508,7 @@ impl WmiConnection {
     fn asushw_path(&self) -> Result<&str> {
         match &self.backend {
             AsusWmiBackend::AsusHW { instance_path } => Ok(instance_path),
-            _ => Err(NoCrateError::Wmi(
-                "当前后端不是 ASUSHW".into(),
-            )),
+            _ => Err(NoCrateError::Wmi("当前后端不是 ASUSHW".into())),
         }
     }
 
@@ -527,10 +532,7 @@ impl WmiConnection {
     /// Returns `(source, sensor_type, data_type, name)`:
     /// - `sensor_type` 1 = temperature, 2 = fan
     /// - `data_type` 3 = value in micro-units (divide by 1_000_000)
-    pub fn asushw_sensor_info(
-        &self,
-        index: u32,
-    ) -> Result<(u32, u32, u32, String)> {
+    pub fn asushw_sensor_info(&self, index: u32) -> Result<(u32, u32, u32, String)> {
         let path = self.asushw_path()?;
         let out = self.exec_method(path, "sensor_get_info", &[("Index", index)])?;
         let source = Self::get_property_u32(&out, "Source")?;
@@ -552,6 +554,132 @@ impl WmiConnection {
         let path = self.asushw_path()?;
         let out = self.exec_method(path, "sensor_get_value", &[("Index", index)])?;
         Self::get_property_u32(&out, "Data")
+    }
+
+    // -----------------------------------------------------------------------
+    // asio_hw_fun* 硬件访问方法（仅 Desktop 后端）
+    // -----------------------------------------------------------------------
+
+    /// 获取 Desktop 后端实例路径。
+    fn desktop_path(&self) -> Result<&str> {
+        match &self.backend {
+            AsusWmiBackend::Desktop { instance_path } => Ok(instance_path),
+            _ => Err(NoCrateError::Wmi("当前后端不是 Desktop".into())),
+        }
+    }
+
+    /// 测试 asio_hw_fun* 方法的可用性，返回诊断结果。
+    ///
+    /// 依次调用 fun07（I/O 端口读）、fun21（SIO Bank+Index 读）、
+    /// fun19（SIO LDN 寄存器读），并报告每个的返回值。
+    pub fn test_asio_hw_fun(&self) -> Result<Vec<(String, Result<u32>)>> {
+        let path = self.desktop_path()?;
+        let mut results = Vec::new();
+
+        // --- fun07: 读 I/O 端口字节 ---
+        // 读 0x2E（SIO config port，应返回非零值如果 SIO 存在）
+        let label = "fun07(wPort=0x2E)".to_string();
+        let r = self
+            .exec_method_v2(path, "asio_hw_fun07", &[("wPort", WmiParam::U32(0x2E))])
+            .and_then(|out| Self::get_property_u32(&out, "bData"));
+        eprintln!("[WMI-TEST] {label}: {:?}", r);
+        results.push((label, r));
+
+        // 读 0x0295（Nuvoton ISA addr port）
+        let label = "fun07(wPort=0x0295)".to_string();
+        let r = self
+            .exec_method_v2(path, "asio_hw_fun07", &[("wPort", WmiParam::U32(0x0295))])
+            .and_then(|out| Self::get_property_u32(&out, "bData"));
+        eprintln!("[WMI-TEST] {label}: {:?}", r);
+        results.push((label, r));
+
+        // 读 0x61（NMI 状态端口，通常有值）
+        let label = "fun07(wPort=0x61)".to_string();
+        let r = self
+            .exec_method_v2(path, "asio_hw_fun07", &[("wPort", WmiParam::U32(0x61))])
+            .and_then(|out| Self::get_property_u32(&out, "bData"));
+        eprintln!("[WMI-TEST] {label}: {:?}", r);
+        results.push((label, r));
+
+        // --- fun21: 按 Bank+Index 读 HW Monitor 寄存器 ---
+        // Bank 0, Index 0x4F = Vendor ID（期望 0x5C = Nuvoton）
+        let label = "fun21(Bank=0, Index=0x4F) [Vendor ID]".to_string();
+        let r = self
+            .exec_method_v2(
+                path,
+                "asio_hw_fun21",
+                &[("Bank", WmiParam::U8(0)), ("Index", WmiParam::U8(0x4F))],
+            )
+            .and_then(|out| Self::get_property_u32(&out, "Data"));
+        eprintln!("[WMI-TEST] {label}: {:?}", r);
+        results.push((label, r));
+
+        // Bank 0, Index 0x27 = SYSTIN temp
+        let label = "fun21(Bank=0, Index=0x27) [SYSTIN]".to_string();
+        let r = self
+            .exec_method_v2(
+                path,
+                "asio_hw_fun21",
+                &[("Bank", WmiParam::U8(0)), ("Index", WmiParam::U8(0x27))],
+            )
+            .and_then(|out| Self::get_property_u32(&out, "Data"));
+        eprintln!("[WMI-TEST] {label}: {:?}", r);
+        results.push((label, r));
+
+        // Bank 4, Index 0xC0/0xC1 = Fan 0 tach
+        let label = "fun21(Bank=4, Index=0xC0) [Fan0 high]".to_string();
+        let r = self
+            .exec_method_v2(
+                path,
+                "asio_hw_fun21",
+                &[("Bank", WmiParam::U8(4)), ("Index", WmiParam::U8(0xC0))],
+            )
+            .and_then(|out| Self::get_property_u32(&out, "Data"));
+        eprintln!("[WMI-TEST] {label}: {:?}", r);
+        results.push((label, r));
+
+        let label = "fun21(Bank=4, Index=0xC1) [Fan0 low]".to_string();
+        let r = self
+            .exec_method_v2(
+                path,
+                "asio_hw_fun21",
+                &[("Bank", WmiParam::U8(4)), ("Index", WmiParam::U8(0xC1))],
+            )
+            .and_then(|out| Self::get_property_u32(&out, "Data"));
+        eprintln!("[WMI-TEST] {label}: {:?}", r);
+        results.push((label, r));
+
+        // --- fun19: 读 SIO LDN 寄存器 ---
+        // LDN 0x0B (HW monitor), Index 0x20 = Chip ID high（期望 0xD8）
+        let label = "fun19(LDN=0x0B, Index=0x20) [ChipID high]".to_string();
+        let r = self
+            .exec_method_v2(
+                path,
+                "asio_hw_fun19",
+                &[("LDN", WmiParam::U8(0x0B)), ("Index", WmiParam::U8(0x20))],
+            )
+            .and_then(|out| Self::get_property_u32(&out, "Data"));
+        eprintln!("[WMI-TEST] {label}: {:?}", r);
+        results.push((label, r));
+
+        // --- fun23: 批量读 Bank+Index ---
+        let label = "fun23('00,4F') [Vendor ID batch]".to_string();
+        let r = self
+            .exec_method_v2(
+                path,
+                "asio_hw_fun23",
+                &[("BankIndexArray", WmiParam::Str("00,4F"))],
+            )
+            .and_then(|out| Self::get_property_string(&out, "DataArray"))
+            .map(|s| {
+                eprintln!("[WMI-TEST] fun23 DataArray raw: '{s}'");
+                // 尝试解析返回的字符串
+                s.parse::<u32>().unwrap_or(0xDEAD)
+            });
+        eprintln!("[WMI-TEST] {label}: {:?}", r);
+        results.push((label, r));
+
+        Ok(results)
     }
 }
 
