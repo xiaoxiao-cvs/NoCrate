@@ -211,9 +211,8 @@ pub fn get_all_fan_speeds(conn: &WmiConnection) -> Vec<FanInfo> {
 /// Read the currently active thermal profile.
 pub fn get_thermal_profile(conn: &WmiConnection) -> Result<ThermalProfile> {
     let raw = dsts(conn, device_id::THROTTLE_THERMAL_POLICY)?;
-    ThermalProfile::from_raw(raw).ok_or_else(|| {
-        NoCrateError::Wmi(format!("Unknown thermal-profile raw value: 0x{raw:08X}"))
-    })
+    ThermalProfile::from_raw(raw)
+        .ok_or_else(|| NoCrateError::Wmi(format!("Unknown thermal-profile raw value: 0x{raw:08X}")))
 }
 
 /// Set the active thermal profile.
@@ -255,14 +254,38 @@ impl FanCurve {
         Self {
             target,
             points: [
-                FanCurvePoint { temp_c: 30, duty_pct: 30 },
-                FanCurvePoint { temp_c: 40, duty_pct: 35 },
-                FanCurvePoint { temp_c: 50, duty_pct: 45 },
-                FanCurvePoint { temp_c: 60, duty_pct: 55 },
-                FanCurvePoint { temp_c: 70, duty_pct: 65 },
-                FanCurvePoint { temp_c: 75, duty_pct: 75 },
-                FanCurvePoint { temp_c: 80, duty_pct: 85 },
-                FanCurvePoint { temp_c: 90, duty_pct: 100 },
+                FanCurvePoint {
+                    temp_c: 30,
+                    duty_pct: 30,
+                },
+                FanCurvePoint {
+                    temp_c: 40,
+                    duty_pct: 35,
+                },
+                FanCurvePoint {
+                    temp_c: 50,
+                    duty_pct: 45,
+                },
+                FanCurvePoint {
+                    temp_c: 60,
+                    duty_pct: 55,
+                },
+                FanCurvePoint {
+                    temp_c: 70,
+                    duty_pct: 65,
+                },
+                FanCurvePoint {
+                    temp_c: 75,
+                    duty_pct: 75,
+                },
+                FanCurvePoint {
+                    temp_c: 80,
+                    duty_pct: 85,
+                },
+                FanCurvePoint {
+                    temp_c: 90,
+                    duty_pct: 100,
+                },
             ],
         }
     }

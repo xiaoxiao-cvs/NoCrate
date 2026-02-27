@@ -67,15 +67,14 @@ impl AuraController {
         }
 
         Err(NoCrateError::Hid(
-            "No AURA motherboard controller found. Checked PIDs: [{}]"
-                .replace(
-                    "[{}]",
-                    &AURA_MB_PIDS
-                        .iter()
-                        .map(|p| format!("0x{p:04X}"))
-                        .collect::<Vec<_>>()
-                        .join(", "),
-                ),
+            "No AURA motherboard controller found. Checked PIDs: [{}]".replace(
+                "[{}]",
+                &AURA_MB_PIDS
+                    .iter()
+                    .map(|p| format!("0x{p:04X}"))
+                    .collect::<Vec<_>>()
+                    .join(", "),
+            ),
         ))
     }
 

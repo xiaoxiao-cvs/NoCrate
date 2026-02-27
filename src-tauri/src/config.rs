@@ -76,9 +76,8 @@ impl ConfigStore {
             .map_err(|_| NoCrateError::Config("Config path already initialized".into()))?;
 
         let config = if config_file.exists() {
-            let data = fs::read_to_string(&config_file).map_err(|e| {
-                NoCrateError::Config(format!("Failed to read config file: {e}"))
-            })?;
+            let data = fs::read_to_string(&config_file)
+                .map_err(|e| NoCrateError::Config(format!("Failed to read config file: {e}")))?;
             serde_json::from_str(&data).unwrap_or_else(|e| {
                 eprintln!("Warning: config parse error ({e}), using defaults");
                 AppConfig::default()

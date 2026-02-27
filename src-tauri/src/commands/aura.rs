@@ -50,10 +50,7 @@ pub fn aura_set_effect(
 
 /// Set a static solid colour on all LEDs.
 #[tauri::command]
-pub fn aura_set_static_color(
-    state: State<'_, AppState>,
-    color: RgbColor,
-) -> Result<(), String> {
+pub fn aura_set_static_color(state: State<'_, AppState>, color: RgbColor) -> Result<(), String> {
     with_aura(&state, |ctrl| ctrl.set_static_color(color))
 }
 
