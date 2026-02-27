@@ -9,7 +9,6 @@ import {
   AURA_EFFECTS,
   auraIsAvailable,
   auraSetEffect,
-  auraSetStaticColor,
   auraTurnOff,
   hexToRgb,
   rgbToHex,
@@ -176,5 +175,4 @@ export default function AuraPage() {
     </motion.div>
   );
 }
-  );
-}
+
