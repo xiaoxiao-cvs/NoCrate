@@ -2,17 +2,14 @@
 ///
 /// Manages the lifecycle of the COM connection to the `root\WMI` namespace,
 /// providing access to `IWbemServices` for invoking ASUS WMI methods.
-
 use windows::core::BSTR;
 use windows::Win32::System::Com::{
-    CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoUninitialize,
-    CLSCTX_INPROC_SERVER, COINIT_MULTITHREADED, EOAC_NONE,
-    RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
+    CoCreateInstance, CoInitializeEx, CoInitializeSecurity, CoUninitialize, CLSCTX_INPROC_SERVER,
+    COINIT_MULTITHREADED, EOAC_NONE, RPC_C_AUTHN_LEVEL_CALL, RPC_C_IMP_LEVEL_IMPERSONATE,
 };
 use windows::Win32::System::Variant::VARIANT;
 use windows::Win32::System::Wmi::{
-    IWbemClassObject, IWbemLocator, IWbemServices, WbemLocator,
-    WBEM_FLAG_RETURN_WBEM_COMPLETE,
+    IWbemClassObject, IWbemLocator, IWbemServices, WbemLocator, WBEM_FLAG_RETURN_WBEM_COMPLETE,
 };
 
 use crate::error::{NoCrateError, Result};
@@ -54,11 +51,11 @@ impl WmiConnection {
                 None,
                 EOAC_NONE,
                 None,
-            ).ok();
+            )
+            .ok();
 
             // Create WMI locator
-            let locator: IWbemLocator =
-                CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER)?;
+            let locator: IWbemLocator = CoCreateInstance(&WbemLocator, None, CLSCTX_INPROC_SERVER)?;
 
             // Connect to root\WMI namespace
             let services = locator.ConnectServer(
@@ -105,17 +102,15 @@ impl WmiConnection {
         params: &[(&str, u32)],
     ) -> Result<IWbemClassObject> {
         unsafe {
-            // Get class definition to obtain method signature
-            let class_obj = self.get_object(object_path)?;
+            // GetMethod only works on class definitions, not instances.
+            // Extract the class name (everything before the first '.') so
+            // we can retrieve the class definition for the method signature.
+            let class_name = object_path.split('.').next().unwrap_or(object_path);
+            let class_obj = self.get_object(class_name)?;
 
             // Get input parameter definition for the method
             let mut in_params_def = None;
-            class_obj.GetMethod(
-                &BSTR::from(method_name),
-                0,
-                &mut in_params_def,
-                &mut None,
-            )?;
+            class_obj.GetMethod(&BSTR::from(method_name), 0, &mut in_params_def, &mut None)?;
 
             let in_params = match in_params_def {
                 Some(def) => {
@@ -123,12 +118,7 @@ impl WmiConnection {
                     // Fill in parameters
                     for &(name, value) in params {
                         let variant = VARIANT::from(i32::try_from(value).unwrap_or(value as i32));
-                        instance.Put(
-                            &BSTR::from(name),
-                            0,
-                            &variant,
-                            0,
-                        )?;
+                        instance.Put(&BSTR::from(name), 0, &variant, 0)?;
                     }
                     Some(instance)
                 }
