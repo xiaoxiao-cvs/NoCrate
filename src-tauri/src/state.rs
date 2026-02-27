@@ -7,6 +7,7 @@ use parking_lot::Mutex;
 use crate::aura::controller::AuraController;
 use crate::config::ConfigStore;
 use crate::error::{NoCrateError, Result};
+use crate::sio::SioMonitor;
 use crate::wmi::connection::WmiConnection;
 
 /// A request to execute on the WMI thread.
@@ -106,6 +107,11 @@ pub struct AppState {
     /// If WMI initialization failed, the error message is stored here
     /// so the frontend can show a meaningful explanation.
     pub wmi_error: Option<String>,
+    /// Super I/O 传感器监控器（读取风扇 RPM 和温度）
+    /// `None` 表示驱动加载失败或未检测到支持的芯片
+    pub sio: Option<SioMonitor>,
+    /// SIO 初始化失败时的错误信息
+    pub sio_error: Option<String>,
 }
 
 impl AppState {
@@ -134,6 +140,19 @@ impl AppState {
             }
         };
 
+        // 初始化 Super I/O 传感器监控（非致命）
+        let resource_dir = std::env::current_exe()
+            .ok()
+            .and_then(|p| p.parent().map(std::path::Path::to_path_buf))
+            .unwrap_or_else(|| std::path::PathBuf::from("."));
+        let (sio, sio_error) = match SioMonitor::init(&resource_dir) {
+            Ok(m) => (Some(m), None),
+            Err(e) => {
+                eprintln!("Warning: SIO initialization failed: {e}");
+                (None, Some(e.to_string()))
+            }
+        };
+
         let config = ConfigStore::init(app_data_dir)?;
 
         Ok(Self {
@@ -141,6 +160,8 @@ impl AppState {
             aura: Mutex::new(aura),
             config,
             wmi_error,
+            sio,
+            sio_error,
         })
     }
 }

@@ -115,3 +115,33 @@ pub fn set_desktop_fan_policy(
 pub fn get_asushw_sensors(state: State<'_, AppState>) -> Result<Vec<AsusHWSensor>, String> {
     with_wmi(&state, |conn| Ok(asus_mgmt::get_asushw_sensors(conn)))
 }
+
+// ---------------------------------------------------------------------------
+// Super I/O 传感器命令
+// ---------------------------------------------------------------------------
+
+use crate::sio::chips::{SioSnapshot, SioStatus};
+
+/// 获取 Super I/O 传感器快照（风扇 RPM + 温度）
+#[tauri::command]
+pub fn get_sio_sensors(state: State<'_, AppState>) -> Result<SioSnapshot, String> {
+    let sio = state.sio.as_ref().ok_or_else(|| {
+        state
+            .sio_error
+            .as_deref()
+            .unwrap_or("SIO 未初始化")
+            .to_string()
+    })?;
+    sio.read_all().map_err(|e| e.to_string())
+}
+
+/// 获取 Super I/O 状态信息
+#[tauri::command]
+pub fn get_sio_status(state: State<'_, AppState>) -> SioStatus {
+    match &state.sio {
+        Some(sio) => sio.status(),
+        None => crate::sio::unavailable_status(
+            state.sio_error.as_deref().unwrap_or("SIO 未初始化"),
+        ),
+    }
+}

@@ -17,6 +17,9 @@ pub enum NoCrateError {
     #[error("Config error: {0}")]
     Config(String),
 
+    #[error("SIO error: {0}")]
+    Sio(String),
+
     #[error("Unknown error: {0}")]
     Unknown(String),
 }

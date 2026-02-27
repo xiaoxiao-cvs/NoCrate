@@ -2,6 +2,7 @@ mod aura;
 mod commands;
 mod config;
 mod error;
+mod sio;
 mod state;
 mod wmi;
 
@@ -93,6 +94,8 @@ pub fn run() {
             commands::fan::get_desktop_fan_policies,
             commands::fan::set_desktop_fan_policy,
             commands::fan::get_asushw_sensors,
+            commands::fan::get_sio_sensors,
+            commands::fan::get_sio_status,
             commands::aura::aura_is_available,
             commands::aura::aura_get_device_info,
             commands::aura::aura_set_effect,
