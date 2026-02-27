@@ -72,7 +72,7 @@ export const FAN_TARGET_LABELS: Record<FanTarget, string> = {
 // ─── Desktop Fan Policy ──────────────────────────────────────
 
 /** Fan control mode on desktop boards. */
-export type DesktopFanMode = "PWM" | "AUTO";
+export type DesktopFanMode = "PWM" | "DC" | "AUTO";
 
 /** Fan curve profile on desktop boards. */
 export type DesktopFanProfile = "MANUAL" | "STANDARD";
@@ -84,6 +84,13 @@ export interface DesktopFanPolicy {
   profile: DesktopFanProfile;
   source: string;
   low_limit: number;
+}
+
+/** 桌面主板 8 点风扇曲线。 */
+export interface DesktopFanCurve {
+  fan_type: number;
+  mode: DesktopFanMode;
+  points: FanCurvePoint[];
 }
 
 /** Display names for desktop fan header indices. */

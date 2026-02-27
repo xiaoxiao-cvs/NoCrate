@@ -1,25 +1,39 @@
 /**
- * Card showing a desktop fan header's policy with inline editing.
+ * Card showing a desktop fan header's policy with inline editing + curve view.
  *
- * Each card displays: fan name, mode (PWM/AUTO), profile (MANUAL/STANDARD),
- * temperature source, and low RPM limit. Mode and profile can be toggled.
+ * Each card displays: fan name, mode (PWM/DC/AUTO), profile (MANUAL/STANDARD),
+ * temperature source, low RPM limit, and an 8-point fan curve editor.
  */
 import { motion } from "motion/react";
-import { Fan, Gauge, Thermometer, Zap } from "lucide-react";
+import { Fan, Gauge, RotateCcw, Save, Thermometer, Zap } from "lucide-react";
+import { useCallback, useState } from "react";
 
+import { FanCurveEditor } from "@/components/fan-curve-editor";
 import { cn } from "@/lib/utils";
-import { DESKTOP_FAN_NAMES, type DesktopFanPolicy, type SioFanReading } from "@/lib/types";
+import {
+  DESKTOP_FAN_NAMES,
+  type DesktopFanCurve,
+  type DesktopFanMode,
+  type DesktopFanPolicy,
+  type FanCurvePoint,
+  type SioFanReading,
+} from "@/lib/types";
 
 export interface DesktopFanPolicyCardProps {
   policy: DesktopFanPolicy;
+  /** 当前模式下的曲线数据（可能尚未加载）。 */
+  curve: DesktopFanCurve | undefined;
   /** Super I/O 风扇转速读数 */
   sioFans: SioFanReading[];
   onUpdate: (policy: DesktopFanPolicy) => void;
+  onLoadCurve: (fanType: number, mode: DesktopFanMode) => void;
+  onSaveCurve: (fanType: number, mode: DesktopFanMode, points: FanCurvePoint[]) => void;
 }
 
-const MODE_OPTIONS = [
-  { value: "PWM" as const, label: "PWM", description: "电压控制" },
-  { value: "AUTO" as const, label: "AUTO", description: "自动调速" },
+const MODE_OPTIONS: { value: DesktopFanMode; label: string; description: string }[] = [
+  { value: "PWM", label: "PWM", description: "脉宽调制" },
+  { value: "DC", label: "DC", description: "电压控制" },
+  { value: "AUTO", label: "AUTO", description: "自动选择" },
 ];
 
 const PROFILE_OPTIONS = [
@@ -29,15 +43,46 @@ const PROFILE_OPTIONS = [
 
 export function DesktopFanPolicyCard({
   policy,
+  curve,
   sioFans,
   onUpdate,
+  onLoadCurve,
+  onSaveCurve,
 }: DesktopFanPolicyCardProps) {
   const fanName =
     DESKTOP_FAN_NAMES[policy.fan_type] ?? `风扇 ${policy.fan_type}`;
 
+  // 编辑中的曲线点（只有用户拖拽修改后才会有值）
+  const [editingPoints, setEditingPoints] = useState<FanCurvePoint[] | null>(null);
+  const isDirty = editingPoints !== null;
+
   // 根据 fan_type 索引在 SIO 风扇列表中查找对应通道的 RPM
-  // SIO 通道 0=CPU Fan, 1-6=机箱风扇 1-6，与 policy.fan_type 对齐
   const rpmReading = sioFans.find((f) => f.channel === policy.fan_type);
+
+  // 当前显示的曲线点：优先编辑中的，否则用硬件读取的
+  const displayPoints = editingPoints ?? curve?.points ?? null;
+
+  // 切换 Mode 时重新加载对应曲线
+  const handleModeChange = useCallback(
+    (mode: DesktopFanMode) => {
+      setEditingPoints(null); // 清除编辑中的修改
+      onUpdate({ ...policy, mode });
+      onLoadCurve(policy.fan_type, mode);
+    },
+    [policy, onUpdate, onLoadCurve],
+  );
+
+  // 保存曲线
+  const handleSave = useCallback(() => {
+    if (!editingPoints) return;
+    onSaveCurve(policy.fan_type, policy.mode, editingPoints);
+    setEditingPoints(null);
+  }, [editingPoints, policy, onSaveCurve]);
+
+  // 放弃编辑
+  const handleDiscard = useCallback(() => {
+    setEditingPoints(null);
+  }, []);
 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-border bg-card p-4">
@@ -88,9 +133,7 @@ export function DesktopFanPolicyCard({
             <button
               key={opt.value}
               type="button"
-              onClick={() =>
-                onUpdate({ ...policy, mode: opt.value })
-              }
+              onClick={() => handleModeChange(opt.value)}
               className={cn(
                 "relative flex-1 rounded-lg border px-2.5 py-1.5 text-xs transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
@@ -151,6 +194,48 @@ export function DesktopFanPolicyCard({
           ))}
         </div>
       </div>
+
+      {/* Fan curve editor */}
+      {displayPoints && (
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-muted-foreground">
+              风扇曲线 ({policy.mode})
+            </span>
+            {isDirty && (
+              <div className="flex gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleDiscard}
+                  className="flex items-center gap-1 rounded-md border border-border px-2 py-0.5 text-xs text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  <RotateCcw className="h-3 w-3" />
+                  撤销
+                </button>
+                <button
+                  type="button"
+                  onClick={handleSave}
+                  className="flex items-center gap-1 rounded-md border border-primary/40 bg-primary/10 px-2 py-0.5 text-xs text-primary transition-colors hover:bg-primary/20"
+                >
+                  <Save className="h-3 w-3" />
+                  应用
+                </button>
+              </div>
+            )}
+          </div>
+          <FanCurveEditor
+            points={displayPoints}
+            onChange={setEditingPoints}
+          />
+        </div>
+      )}
+
+      {/* No curve loaded placeholder */}
+      {!displayPoints && (
+        <div className="rounded-lg border border-dashed border-border py-4 text-center text-xs text-muted-foreground">
+          曲线数据加载中…
+        </div>
+      )}
     </div>
   );
 }

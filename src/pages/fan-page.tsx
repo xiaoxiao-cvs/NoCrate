@@ -14,7 +14,7 @@ import { getWmiBackend } from "@/lib/tauri-commands";
 import { spring, staggerContainer, staggerItem } from "@/lib/motion";
 import { FAN_TARGET_LABELS, type FanCurvePoint, type WmiBackend } from "@/lib/types";
 
-/** Default editable fan curve. */
+/** Default editable fan curve (used by LaptopFanView). */
 const DEFAULT_CURVE: FanCurvePoint[] = [
   { temp_c: 30, duty_pct: 30 },
   { temp_c: 40, duty_pct: 35 },
@@ -92,7 +92,7 @@ export default function FanPage() {
 // ===========================================================================
 
 function DesktopFanView() {
-  const { policies, sioData, loading, error, updatePolicy } = useDesktopFanData();
+  const { policies, curves, sioData, loading, error, updatePolicy, loadCurve, saveCurve } = useDesktopFanData();
 
   const sioFans = sioData?.fans ?? [];
   const sioTemps = sioData?.temps ?? [];
@@ -151,8 +151,11 @@ function DesktopFanView() {
             <DesktopFanPolicyCard
               key={p.fan_type}
               policy={p}
+              curve={curves.get(`${p.fan_type}-${p.mode}`)}
               sioFans={sioFans}
               onUpdate={updatePolicy}
+              onLoadCurve={loadCurve}
+              onSaveCurve={saveCurve}
             />
           ))}
         </motion.div>

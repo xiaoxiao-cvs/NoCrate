@@ -8,6 +8,8 @@ import { invoke } from "@tauri-apps/api/core";
 
 import type {
   AsusHWSensor,
+  DesktopFanCurve,
+  DesktopFanMode,
   DesktopFanPolicy,
   FanCurve,
   FanInfo,
@@ -64,6 +66,31 @@ export async function setDesktopFanPolicy(
   policy: DesktopFanPolicy,
 ): Promise<void> {
   return invoke<void>("set_desktop_fan_policy", { policy });
+}
+
+/** 读取桌面风扇头在指定模式下的 8 点曲线。 */
+export async function getDesktopFanCurve(
+  fanType: number,
+  mode: DesktopFanMode,
+): Promise<DesktopFanCurve | null> {
+  return invoke<DesktopFanCurve | null>("get_desktop_fan_curve", {
+    fanType,
+    mode,
+  });
+}
+
+/** 写入桌面风扇头的 8 点曲线。 */
+export async function setDesktopFanCurve(
+  curve: DesktopFanCurve,
+): Promise<void> {
+  return invoke<void>("set_desktop_fan_curve", { curve });
+}
+
+/** 探测所有存在的风扇头及其支持的控制模式。 */
+export async function probeDesktopFanTypes(): Promise<
+  [number, DesktopFanMode[]][]
+> {
+  return invoke<[number, DesktopFanMode[]][]>("probe_desktop_fan_types");
 }
 
 // ─── ASUSHW sensor commands ──────────────────────────────────
