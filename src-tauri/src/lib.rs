@@ -16,16 +16,20 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .setup(|app| {
-            // Resolve the app data directory for config persistence
+            // Resolve directories for config and resources
             let app_data_dir = app
                 .path()
                 .app_data_dir()
                 .expect("failed to resolve app data directory");
+            let resource_dir = app
+                .path()
+                .resource_dir()
+                .expect("failed to resolve resource directory");
 
             // Initialize application state.
             // WMI and AURA failures are non-fatal — the state is always
             // managed so commands can return clean errors instead of panics.
-            match AppState::new(app_data_dir) {
+            match AppState::new(app_data_dir, resource_dir) {
                 Ok(state) => {
                     let _ = app.manage(state);
                 }
