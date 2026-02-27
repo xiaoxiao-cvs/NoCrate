@@ -26,15 +26,15 @@ impl NuvotonChip {
     }
 
     /// 读取指定 bank 和寄存器的值
-    /// Nuvoton 使用 bank 切换寄存器 (base + 0x4E) 选择 bank，
-    /// 然后通过 (base + 0x4F) 访问对应寄存器
+    /// Nuvoton ISA HW Monitor 使用 (base+5) 作为地址端口、(base+6) 作为数据端口
+    /// bank 切换通过写寄存器 0x4E 实现
     fn read_register(&self, drv: &DriverHandle, bank: u8, reg: u8) -> Result<u8> {
-        // 选择 bank
-        drv.write_io_port_byte(self.base_addr + 0x4E, bank)?;
-        // 写入寄存器地址
-        drv.write_io_port_byte(self.base_addr + 0x05, reg)?;
-        // 读取值
-        drv.read_io_port_byte(self.base_addr + 0x06)
+        // 切换 bank：地址端口 ← 0x4E，数据端口 ← bank
+        drv.write_io_port_byte(self.base_addr + 5, 0x4E)?;
+        drv.write_io_port_byte(self.base_addr + 6, bank)?;
+        // 读取目标寄存器：地址端口 ← reg，数据端口 → value
+        drv.write_io_port_byte(self.base_addr + 5, reg)?;
+        drv.read_io_port_byte(self.base_addr + 6)
     }
 }
 

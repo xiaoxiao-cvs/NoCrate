@@ -9,8 +9,10 @@ use crate::error::{NoCrateError, Result};
 
 /// 探测芯片，返回初始化好的 Chip 实现
 pub fn detect_chip(drv: &DriverHandle) -> Result<Box<dyn Chip>> {
+    eprintln!("[SIO] 开始芯片检测...");
     // 依次在两个标准配置端口上探测
     for &config_port in &[0x2E_u16, 0x4E_u16] {
+        eprintln!("[SIO] 探测配置端口 0x{config_port:02X}");
         // 先尝试 Nuvoton/Winbond（Fintek 共用入口序列）
         if let Some(chip) = try_nuvoton(drv, config_port)? {
             return Ok(chip);
@@ -43,15 +45,18 @@ fn try_nuvoton(drv: &DriverHandle, port: u16) -> Result<Option<Box<dyn Chip>>> {
 
     let chip_id = (id_high << 8) | id_low;
 
-    // 检查是否为已知的 Nuvoton 芯片
-    let chip_name = match chip_id {
-        0xD42A | 0xD42B => "NCT6796D",
-        0xD428 => "NCT6798D",
-        0xD802 | 0xD800 => "NCT6799D",
-        // Nuvoton 6791/6792/6795
-        0xC803 => "NCT6791D",
-        0xC911 => "NCT6792D",
-        0xC951 | 0xC952 => "NCT6795D",
+    eprintln!("[SIO]   Nuvoton 探测 @ 0x{port:02X}: ID=0x{chip_id:04X} (high=0x{id_high:02X}, low=0x{id_low:02X})");
+
+    // 按高字节+掩码匹配已知 Nuvoton 芯片（低 nibble 为硅版本号，可忽略）
+    // 参考 LibreHardwareMonitor LPCIO.cs 的 chip_id & 0xFFF0 匹配逻辑
+    let chip_name = match chip_id & 0xFFF0 {
+        0xD420 => "NCT6796D",
+        0xD450 => "NCT6797D",
+        0xD580 => "NCT6798D",
+        0xD800 => "NCT6799D",
+        0xC800 => "NCT6791D",
+        0xC910 => "NCT6792D",
+        0xC950 => "NCT6795D",
         _ => {
             // 不是 Nuvoton，退出扩展功能模式
             drv.write_io_port_byte(port, 0xAA)?;
@@ -78,7 +83,14 @@ fn try_nuvoton(drv: &DriverHandle, port: u16) -> Result<Option<Box<dyn Chip>>> {
         return Ok(None);
     }
 
-    eprintln!("SIO: 检测到 {chip_name}，Chip ID=0x{chip_id:04X}，HW Monitor 基地址=0x{base_addr:04X}");
+    eprintln!(
+        "SIO: 检测到 {chip_name}，Chip ID=0x{chip_id:04X}，HW Monitor 基地址=0x{base_addr:04X}"
+    );
+
+    // 确保 LPC 桥解码此 I/O 范围（AMD FCH 需要显式配置）
+    if let Err(e) = drv.enable_lpc_io_decode(base_addr) {
+        eprintln!("[SIO] LPC I/O 解码配置警告: {e}");
+    }
 
     Ok(Some(Box::new(NuvotonChip::new(
         chip_name.to_string(),
@@ -109,6 +121,8 @@ fn try_ite(drv: &DriverHandle, port: u16) -> Result<Option<Box<dyn Chip>>> {
     let id_low = drv.read_io_port_byte(data_port)? as u16;
 
     let chip_id = (id_high << 8) | id_low;
+
+    eprintln!("[SIO]   ITE 探测 @ 0x{port:02X}: ID=0x{chip_id:04X} (high=0x{id_high:02X}, low=0x{id_low:02X})");
 
     // 检查是否为已知的 ITE 芯片
     let chip_name = match chip_id {
