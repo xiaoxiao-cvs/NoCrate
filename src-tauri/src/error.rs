@@ -30,6 +30,12 @@ impl From<windows::core::Error> for NoCrateError {
     }
 }
 
+impl From<hidapi::HidError> for NoCrateError {
+    fn from(err: hidapi::HidError) -> Self {
+        Self::Hid(err.to_string())
+    }
+}
+
 impl From<NoCrateError> for String {
     fn from(err: NoCrateError) -> Self {
         err.to_string()
