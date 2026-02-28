@@ -7,6 +7,7 @@ use parking_lot::Mutex;
 use crate::aura::controller::AuraController;
 use crate::config::ConfigStore;
 use crate::error::{NoCrateError, Result};
+#[cfg(feature = "sio")]
 use crate::sio::SioMonitor;
 use crate::wmi::connection::WmiConnection;
 
@@ -109,8 +110,10 @@ pub struct AppState {
     pub wmi_error: Option<String>,
     /// Super I/O 传感器监控器（读取风扇 RPM 和温度）
     /// `None` 表示驱动加载失败或未检测到支持的芯片
+    #[cfg(feature = "sio")]
     pub sio: Option<SioMonitor>,
     /// SIO 初始化失败时的错误信息
+    #[cfg(feature = "sio")]
     pub sio_error: Option<String>,
 }
 
@@ -119,7 +122,7 @@ impl AppState {
     ///
     /// WMI and AURA discovery failures are both non-fatal — the app
     /// launches regardless, with degraded functionality.
-    pub fn new(app_data_dir: PathBuf, resource_dir: PathBuf) -> Result<Self> {
+    pub fn new(app_data_dir: PathBuf, #[cfg_attr(not(feature = "sio"), allow(unused))] resource_dir: PathBuf) -> Result<Self> {
         let (wmi, wmi_error) = match WmiThread::spawn() {
             Ok(w) => (Some(w), None),
             Err(e) => {
@@ -141,6 +144,7 @@ impl AppState {
         };
 
         // 初始化 Super I/O 传感器监控（非致命）
+        #[cfg(feature = "sio")]
         let (sio, sio_error) = match SioMonitor::init(&resource_dir) {
             Ok(m) => (Some(m), None),
             Err(e) => {
@@ -156,7 +160,9 @@ impl AppState {
             aura: Mutex::new(aura),
             config,
             wmi_error,
+            #[cfg(feature = "sio")]
             sio,
+            #[cfg(feature = "sio")]
             sio_error,
         })
     }

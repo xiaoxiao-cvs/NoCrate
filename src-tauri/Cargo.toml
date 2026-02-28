@@ -38,6 +38,10 @@ features = [
     "Win32_UI_WindowsAndMessaging",
 ]
 
+[features]
+default = []
+sio = []
+
 [lints.rust]
 unsafe_code = "warn"
 unused_results = "warn"

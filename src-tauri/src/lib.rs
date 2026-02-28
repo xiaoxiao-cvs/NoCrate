@@ -2,6 +2,7 @@ mod aura;
 mod commands;
 mod config;
 mod error;
+#[cfg(feature = "sio")]
 mod sio;
 mod state;
 mod wmi;
@@ -102,7 +103,9 @@ pub fn run() {
             commands::fan::set_desktop_fan_curve,
             commands::fan::probe_desktop_fan_types,
             commands::fan::test_asio_hw_fun,
+            #[cfg(feature = "sio")]
             commands::fan::get_sio_sensors,
+            #[cfg(feature = "sio")]
             commands::fan::get_sio_status,
             commands::sensor::get_lhm_status,
             commands::sensor::get_lhm_sensors,

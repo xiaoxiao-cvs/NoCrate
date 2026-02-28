@@ -182,9 +182,11 @@ pub fn test_asio_hw_fun(state: State<'_, AppState>) -> Result<Vec<(String, Strin
 // Super I/O 传感器命令
 // ---------------------------------------------------------------------------
 
+#[cfg(feature = "sio")]
 use crate::sio::chips::{SioSnapshot, SioStatus};
 
 /// 获取 Super I/O 传感器快照（风扇 RPM + 温度）
+#[cfg(feature = "sio")]
 #[tauri::command]
 pub fn get_sio_sensors(state: State<'_, AppState>) -> Result<SioSnapshot, String> {
     let sio = state.sio.as_ref().ok_or_else(|| {
@@ -198,6 +200,7 @@ pub fn get_sio_sensors(state: State<'_, AppState>) -> Result<SioSnapshot, String
 }
 
 /// 获取 Super I/O 状态信息
+#[cfg(feature = "sio")]
 #[tauri::command]
 pub fn get_sio_status(state: State<'_, AppState>) -> SioStatus {
     match &state.sio {
