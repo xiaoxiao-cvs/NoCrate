@@ -569,10 +569,8 @@ pub fn get_desktop_fan_curve_pro(
         let temp_name = format!("Point{idx}Temp");
         let duty_name = format!("Point{idx}Duty");
 
-        points[i].temp_c =
-            WmiConnection::get_property_u32(&out, &temp_name)? as u8;
-        points[i].duty_pct =
-            WmiConnection::get_property_u32(&out, &duty_name)? as u8;
+        points[i].temp_c = WmiConnection::get_property_u32(&out, &temp_name)? as u8;
+        points[i].duty_pct = WmiConnection::get_property_u32(&out, &duty_name)? as u8;
     }
 
     Ok(Some(DesktopFanCurve {
@@ -587,10 +585,7 @@ pub fn get_desktop_fan_curve_pro(
 /// # 校验
 /// - 温度值必须单调递增
 /// - Duty 值必须在 0–100 范围内
-pub fn set_desktop_fan_curve_pro(
-    conn: &WmiConnection,
-    curve: &DesktopFanCurve,
-) -> Result<()> {
+pub fn set_desktop_fan_curve_pro(conn: &WmiConnection, curve: &DesktopFanCurve) -> Result<()> {
     // 校验温度单调递增
     for i in 1..FAN_CURVE_POINTS {
         if curve.points[i].temp_c < curve.points[i - 1].temp_c {
@@ -675,9 +670,7 @@ pub fn set_desktop_fan_curve_pro(
 ///
 /// 返回 `(fan_type, Vec<DesktopFanMode>)` 列表。
 /// 通过尝试 `GetManualFanCurvePro` 来判断某 FanType+Mode 组合是否可用。
-pub fn probe_desktop_fan_types(
-    conn: &WmiConnection,
-) -> Vec<(u8, Vec<DesktopFanMode>)> {
+pub fn probe_desktop_fan_types(conn: &WmiConnection) -> Vec<(u8, Vec<DesktopFanMode>)> {
     let mut result = Vec::new();
 
     for ft in 0..DESKTOP_MAX_FAN_HEADERS {

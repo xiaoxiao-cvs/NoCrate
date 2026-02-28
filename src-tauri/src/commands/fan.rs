@@ -155,9 +155,7 @@ pub fn set_desktop_fan_curve(
 pub fn probe_desktop_fan_types(
     state: State<'_, AppState>,
 ) -> Result<Vec<(u8, Vec<DesktopFanMode>)>, String> {
-    with_wmi(&state, |conn| {
-        Ok(asus_mgmt::probe_desktop_fan_types(conn))
-    })
+    with_wmi(&state, |conn| Ok(asus_mgmt::probe_desktop_fan_types(conn)))
 }
 
 /// 测试 asio_hw_fun* WMI 方法的可用性。
