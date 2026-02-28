@@ -88,7 +88,6 @@ impl FanTarget {
             Self::Mid => device_id::MID_FAN_SPEED,
         }
     }
-
 }
 
 /// ASUS thermal-profile presets.

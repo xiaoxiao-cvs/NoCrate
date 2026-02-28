@@ -122,7 +122,10 @@ impl AppState {
     ///
     /// WMI and AURA discovery failures are both non-fatal — the app
     /// launches regardless, with degraded functionality.
-    pub fn new(app_data_dir: PathBuf, #[cfg_attr(not(feature = "sio"), allow(unused))] resource_dir: PathBuf) -> Result<Self> {
+    pub fn new(
+        app_data_dir: PathBuf,
+        #[cfg_attr(not(feature = "sio"), allow(unused))] resource_dir: PathBuf,
+    ) -> Result<Self> {
         let (wmi, wmi_error) = match WmiThread::spawn() {
             Ok(w) => (Some(w), None),
             Err(e) => {

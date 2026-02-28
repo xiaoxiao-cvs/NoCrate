@@ -84,11 +84,16 @@ pub fn get_lhm_status(conn: &WmiConnection) -> LhmStatus {
 }
 
 /// Read a single sensor from a WMI result object.
-fn parse_sensor(_conn: &WmiConnection, obj: &windows::Win32::System::Wmi::IWbemClassObject) -> Option<LhmSensor> {
+fn parse_sensor(
+    _conn: &WmiConnection,
+    obj: &windows::Win32::System::Wmi::IWbemClassObject,
+) -> Option<LhmSensor> {
     let identifier = WmiConnection::get_property_string(obj, "Identifier").ok()?;
     let name = WmiConnection::get_property_string(obj, "Name").ok()?;
     let sensor_type = WmiConnection::get_property_string(obj, "SensorType").ok()?;
-    let parent = WmiConnection::get_property_string(obj, "Parent").ok().unwrap_or_default();
+    let parent = WmiConnection::get_property_string(obj, "Parent")
+        .ok()
+        .unwrap_or_default();
 
     // Value/Min/Max are float properties — read as VARIANT and convert
     let value = get_property_f32(obj, "Value").unwrap_or(0.0);
@@ -115,9 +120,7 @@ fn get_property_f32(
     name: &str,
 ) -> Option<f32> {
     use windows::core::BSTR;
-    use windows::Win32::System::Variant::{
-        VariantChangeType, VARIANT, VAR_CHANGE_FLAGS, VT_R4,
-    };
+    use windows::Win32::System::Variant::{VariantChangeType, VARIANT, VAR_CHANGE_FLAGS, VT_R4};
 
     unsafe {
         let mut val = VARIANT::default();

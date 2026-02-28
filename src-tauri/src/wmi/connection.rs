@@ -170,7 +170,11 @@ impl WmiConnection {
             // Try to connect to LHM namespace (non-fatal)
             let lhm_services = Self::try_connect_lhm(&locator);
 
-            Ok(Self { services, backend, lhm_services })
+            Ok(Self {
+                services,
+                backend,
+                lhm_services,
+            })
         }
     }
 
@@ -727,7 +731,9 @@ impl WmiConnection {
                     eprintln!("[WMI] ✓ Connected to root\\LibreHardwareMonitor");
                 }
                 None => {
-                    eprintln!("[WMI] ✗ root\\LibreHardwareMonitor not available (LHM not running?)");
+                    eprintln!(
+                        "[WMI] ✗ root\\LibreHardwareMonitor not available (LHM not running?)"
+                    );
                 }
             }
 
