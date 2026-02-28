@@ -1,5 +1,5 @@
 import { useLocation, useNavigate } from "react-router";
-import { Fan, Sparkles, Settings, PanelLeftClose, PanelLeft, Sun, Moon } from "lucide-react";
+import { Fan, Sparkles, Settings, PanelLeftClose, PanelLeft, Sun, Moon, Activity } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import { useCallback, useState } from "react";
 import { cn } from "@/lib/utils";
@@ -14,6 +14,7 @@ interface NavItem {
 
 const navItems: NavItem[] = [
   { path: "/fan", label: "风扇控制", icon: Fan },
+  { path: "/sensor", label: "传感器", icon: Activity },
   { path: "/aura", label: "灯效控制", icon: Sparkles },
   { path: "/settings", label: "设置", icon: Settings },
 ];

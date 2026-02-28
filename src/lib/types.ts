@@ -151,3 +151,33 @@ export interface SioStatus {
   chip_name: string | null;
   error: string | null;
 }
+
+// ─── LibreHardwareMonitor (LHM) 传感器类型 ───────────────────
+
+/** LHM 服务可用性状态 */
+export type LhmStatus =
+  | { available: { sensor_count: number } }
+  | "no_sensors"
+  | "unavailable";
+
+/** 单个 LHM 传感器读数 */
+export interface LhmSensor {
+  identifier: string;
+  name: string;
+  sensor_type: string;
+  value: number;
+  min: number;
+  max: number;
+  parent: string;
+}
+
+/** LHM 传感器分组快照 */
+export interface LhmSensorSnapshot {
+  temperatures: LhmSensor[];
+  fans: LhmSensor[];
+  controls: LhmSensor[];
+  voltages: LhmSensor[];
+  clocks: LhmSensor[];
+  loads: LhmSensor[];
+  powers: LhmSensor[];
+}

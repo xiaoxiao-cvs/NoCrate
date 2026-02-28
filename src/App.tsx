@@ -6,6 +6,7 @@ import { ToastProvider } from "./hooks/use-toast";
 import { AppLayout } from "./layouts/app-layout";
 
 const FanPage = lazy(() => import("./pages/fan-page"));
+const SensorPage = lazy(() => import("./pages/sensor-page"));
 const AuraPage = lazy(() => import("./pages/aura-page"));
 const SettingsPage = lazy(() => import("./pages/settings-page"));
 
@@ -22,6 +23,14 @@ export function App() {
                   element={
                     <Suspense>
                       <FanPage />
+                    </Suspense>
+                  }
+                />
+                <Route
+                  path="/sensor"
+                  element={
+                    <Suspense>
+                      <SensorPage />
                     </Suspense>
                   }
                 />

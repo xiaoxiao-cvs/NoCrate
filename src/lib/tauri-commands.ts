@@ -14,6 +14,8 @@ import type {
   FanCurve,
   FanInfo,
   FanTarget,
+  LhmSensorSnapshot,
+  LhmStatus,
   SioSnapshot,
   SioStatus,
   ThermalProfile,
@@ -110,4 +112,16 @@ export async function getSioSensors(): Promise<SioSnapshot> {
 /** 获取 Super I/O 模块状态（芯片型号、是否可用等） */
 export async function getSioStatus(): Promise<SioStatus> {
   return invoke<SioStatus>("get_sio_status");
+}
+
+// ─── LibreHardwareMonitor 传感器命令 ─────────────────────────
+
+/** 检测 LHM 服务是否可用。 */
+export async function getLhmStatus(): Promise<LhmStatus> {
+  return invoke<LhmStatus>("get_lhm_status");
+}
+
+/** 获取全部 LHM 传感器读数（分组）。 */
+export async function getLhmSensors(): Promise<LhmSensorSnapshot> {
+  return invoke<LhmSensorSnapshot>("get_lhm_sensors");
 }
