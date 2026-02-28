@@ -84,6 +84,9 @@ impl AsusWmiBackend {
 pub struct WmiConnection {
     services: IWbemServices,
     pub backend: AsusWmiBackend,
+    /// Optional connection to `root\LibreHardwareMonitor` namespace.
+    /// `None` if LHM is not installed or not running.
+    lhm_services: Option<IWbemServices>,
 }
 
 impl WmiConnection {
@@ -164,7 +167,10 @@ impl WmiConnection {
             let backend = Self::detect_backend(&services)?;
             eprintln!("[WMI] Backend detected: {}", backend.label());
 
-            Ok(Self { services, backend })
+            // Try to connect to LHM namespace (non-fatal)
+            let lhm_services = Self::try_connect_lhm(&locator);
+
+            Ok(Self { services, backend, lhm_services })
         }
     }
 
@@ -680,6 +686,98 @@ impl WmiConnection {
         results.push((label, r));
 
         Ok(results)
+    }
+
+    // -----------------------------------------------------------------------
+    // LibreHardwareMonitor WMI connection
+    // -----------------------------------------------------------------------
+
+    /// Attempt to connect to the `root\LibreHardwareMonitor` namespace.
+    ///
+    /// Returns `None` if the namespace doesn't exist (LHM not installed or
+    /// not running). This is always non-fatal.
+    #[allow(unsafe_code)]
+    fn try_connect_lhm(locator: &IWbemLocator) -> Option<IWbemServices> {
+        unsafe {
+            let svc = locator
+                .ConnectServer(
+                    &BSTR::from("root\\LibreHardwareMonitor"),
+                    &BSTR::new(),
+                    &BSTR::new(),
+                    &BSTR::new(),
+                    0,
+                    &BSTR::new(),
+                    None,
+                )
+                .ok();
+
+            match svc {
+                Some(ref s) => {
+                    // Apply per-proxy security (same as main connection)
+                    let _ = CoSetProxyBlanket(
+                        s,
+                        10, // RPC_C_AUTHN_WINNT
+                        0,  // RPC_C_AUTHZ_NONE
+                        None,
+                        RPC_C_AUTHN_LEVEL_CALL,
+                        RPC_C_IMP_LEVEL_IMPERSONATE,
+                        None,
+                        EOAC_NONE,
+                    );
+                    eprintln!("[WMI] ✓ Connected to root\\LibreHardwareMonitor");
+                }
+                None => {
+                    eprintln!("[WMI] ✗ root\\LibreHardwareMonitor not available (LHM not running?)");
+                }
+            }
+
+            svc
+        }
+    }
+
+    /// Get a reference to the LHM `IWbemServices`, if available.
+    pub fn lhm_services(&self) -> Option<&IWbemServices> {
+        self.lhm_services.as_ref()
+    }
+
+    /// Execute a WQL query on the LHM namespace and iterate results.
+    ///
+    /// Calls `IWbemServices::ExecQuery` with the given WQL string and
+    /// collects all result objects into a `Vec`.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if LHM is not connected or the query fails.
+    #[allow(unsafe_code)]
+    pub fn lhm_query(&self, wql: &str) -> Result<Vec<IWbemClassObject>> {
+        let services = self
+            .lhm_services
+            .as_ref()
+            .ok_or_else(|| NoCrateError::Wmi("LibreHardwareMonitor 未连接".into()))?;
+
+        unsafe {
+            let enumerator = services.ExecQuery(
+                &BSTR::from("WQL"),
+                &BSTR::from(wql),
+                WBEM_FLAG_FORWARD_ONLY | WBEM_FLAG_RETURN_IMMEDIATELY,
+                None,
+            )?;
+
+            let mut results = Vec::new();
+            loop {
+                let mut returned: u32 = 0;
+                let mut row = [None; 1];
+                let hr = enumerator.Next(2000, &mut row, &mut returned);
+                if hr.is_err() || returned == 0 {
+                    break;
+                }
+                if let Some(obj) = row[0].take() {
+                    results.push(obj);
+                }
+            }
+
+            Ok(results)
+        }
     }
 }
 

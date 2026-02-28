@@ -104,6 +104,8 @@ pub fn run() {
             commands::fan::test_asio_hw_fun,
             commands::fan::get_sio_sensors,
             commands::fan::get_sio_status,
+            commands::sensor::get_lhm_status,
+            commands::sensor::get_lhm_sensors,
             commands::aura::aura_is_available,
             commands::aura::aura_get_device_info,
             commands::aura::aura_set_effect,
