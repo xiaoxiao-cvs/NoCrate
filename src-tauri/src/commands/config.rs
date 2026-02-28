@@ -21,6 +21,8 @@ pub fn update_config(
     last_aura_effect: Option<String>,
     last_aura_color: Option<String>,
     last_aura_speed: Option<String>,
+    temp_alert_enabled: Option<bool>,
+    temp_alert_threshold: Option<u8>,
 ) -> Result<AppConfig, String> {
     state
         .config
@@ -48,6 +50,12 @@ pub fn update_config(
             }
             if let Some(v) = last_aura_speed {
                 cfg.last_aura_speed = v;
+            }
+            if let Some(v) = temp_alert_enabled {
+                cfg.temp_alert_enabled = v;
+            }
+            if let Some(v) = temp_alert_threshold {
+                cfg.temp_alert_threshold = v;
             }
         })
         .map_err(|e| e.to_string())

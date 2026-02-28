@@ -34,6 +34,8 @@ const DEFAULT_CONFIG: AppConfig = {
   last_aura_effect: "static",
   last_aura_color: "#ff0000",
   last_aura_speed: "medium",
+  temp_alert_enabled: true,
+  temp_alert_threshold: 90,
 };
 
 export function ConfigProvider({ children }: { children: ReactNode }) {

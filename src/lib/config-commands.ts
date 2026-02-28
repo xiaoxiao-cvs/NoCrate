@@ -10,6 +10,8 @@ export interface AppConfig {
   last_aura_effect: string;
   last_aura_color: string;
   last_aura_speed: string;
+  temp_alert_enabled: boolean;
+  temp_alert_threshold: number;
 }
 
 export type ConfigUpdate = Partial<AppConfig>;

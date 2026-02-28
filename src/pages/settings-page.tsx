@@ -16,6 +16,7 @@ import {
   ExternalLink,
   Download,
   Upload,
+  Thermometer,
 } from "lucide-react";
 import { invoke } from "@tauri-apps/api/core";
 import { openUrl } from "@tauri-apps/plugin-opener";
@@ -376,7 +377,67 @@ export default function SettingsPage() {
         </Card>
       </motion.div>
 
-      {/* Fan Profile Export/Import */}
+      {/* Temperature Alerts */}
+      <motion.div variants={staggerItem} transition={spring.soft}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Thermometer className="h-4 w-4" />
+              温度警告
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="divide-y divide-border">
+              <SettingRow
+                icon={Thermometer}
+                label="启用温度警告"
+                description="当传感器温度超过阈值时弹出通知"
+              >
+                <Switch
+                  checked={config.temp_alert_enabled}
+                  onCheckedChange={async (v) => {
+                    try {
+                      await update({ temp_alert_enabled: v });
+                      toast.success(v ? "温度警告已开启" : "温度警告已关闭");
+                    } catch {
+                      toast.error("保存失败");
+                    }
+                  }}
+                />
+              </SettingRow>
+              <SettingRow
+                icon={Thermometer}
+                label="温度阈值"
+                description={`当前设置：${config.temp_alert_threshold}°C`}
+              >
+                <div className="flex items-center gap-2">
+                  <input
+                    type="range"
+                    min={60}
+                    max={100}
+                    step={5}
+                    value={config.temp_alert_threshold}
+                    onChange={async (e) => {
+                      const value = Number(e.target.value);
+                      try {
+                        await update({ temp_alert_threshold: value });
+                      } catch {
+                        toast.error("保存失败");
+                      }
+                    }}
+                    className="h-1.5 w-24 cursor-pointer appearance-none rounded-full bg-muted accent-primary"
+                  />
+                  <span className="w-12 text-right text-xs font-mono text-muted-foreground">
+                    {config.temp_alert_threshold}°C
+                  </span>
+                </div>
+              </SettingRow>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Fan Profile Export/Import */
       <motion.div variants={staggerItem} transition={spring.soft}>
         <Card>
           <CardHeader>

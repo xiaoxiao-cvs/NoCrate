@@ -37,6 +37,12 @@ pub struct AppConfig {
 
     /// Last selected AURA speed: "slow" | "medium" | "fast"
     pub last_aura_speed: String,
+
+    /// Whether temperature threshold alerts are enabled
+    pub temp_alert_enabled: bool,
+
+    /// Temperature threshold in °C for alerts
+    pub temp_alert_threshold: u8,
 }
 
 impl Default for AppConfig {
@@ -50,6 +56,8 @@ impl Default for AppConfig {
             last_aura_effect: "static".into(),
             last_aura_color: "#ff0000".into(),
             last_aura_speed: "medium".into(),
+            temp_alert_enabled: true,
+            temp_alert_threshold: 90,
         }
     }
 }

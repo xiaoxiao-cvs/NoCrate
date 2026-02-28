@@ -6,6 +6,8 @@ import { Sidebar } from "@/components/sidebar";
 import { ElevationDialog } from "@/components/elevation-dialog";
 import { pageVariants, pageTransition, spring } from "@/lib/motion";
 import { useAdminStatus } from "@/hooks/use-admin-status";
+import { useLhmData } from "@/hooks/use-lhm-data";
+import { useTempAlerts } from "@/hooks/use-temp-alerts";
 import { restartAsAdmin } from "@/lib/system-commands";
 import { useState } from "react";
 
@@ -45,6 +47,10 @@ export function AppLayout() {
   const location = useLocation();
   const isAdmin = useAdminStatus();
   const [elevationDismissed, setElevationDismissed] = useState(false);
+
+  // Global LHM polling — drives temperature alerts
+  const { snapshot } = useLhmData();
+  useTempAlerts(snapshot);
 
   const showDialog = isAdmin === false && !elevationDismissed;
   const showBanner = isAdmin === false && elevationDismissed;
