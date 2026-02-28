@@ -119,6 +119,8 @@ pub fn run() {
             commands::config::update_config,
             commands::system::is_admin,
             commands::system::restart_as_admin,
+            commands::system::set_auto_start,
+            commands::system::get_auto_start_enabled,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

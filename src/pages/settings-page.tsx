@@ -1,4 +1,5 @@
 import { motion } from "motion/react";
+import { useState, useEffect, useCallback } from "react";
 import {
   Settings,
   Monitor,
@@ -8,16 +9,28 @@ import {
   RefreshCw,
   ShieldCheck,
   ShieldAlert,
+  Power,
+  Activity,
+  CheckCircle,
+  XCircle,
+  ExternalLink,
+  Download,
+  Upload,
 } from "lucide-react";
+import { invoke } from "@tauri-apps/api/core";
+import { openUrl } from "@tauri-apps/plugin-opener";
 
 import { staggerContainer, staggerItem, spring } from "@/lib/motion";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Switch } from "@/components/ui/switch";
 import { Select, type SelectOption } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { useConfig } from "@/hooks/use-config";
 import { useTheme } from "@/hooks/use-theme";
 import { useToast } from "@/hooks/use-toast";
 import { useAdminStatus } from "@/hooks/use-admin-status";
+import { getLhmStatus } from "@/lib/tauri-commands";
+import type { LhmStatus } from "@/lib/types";
 
 // ─── Theme Options ───────────────────────────────────────────
 const themeOptions: SelectOption[] = [
@@ -68,6 +81,39 @@ export default function SettingsPage() {
   const toast = useToast();
   const isAdmin = useAdminStatus();
 
+  // ─── Auto-start state ──────────────────────────────────
+  const [autoStartEnabled, setAutoStartEnabled] = useState<boolean | null>(null);
+
+  useEffect(() => {
+    invoke<boolean>("get_auto_start_enabled")
+      .then(setAutoStartEnabled)
+      .catch(() => setAutoStartEnabled(false));
+  }, []);
+
+  const handleAutoStart = useCallback(
+    async (enabled: boolean) => {
+      try {
+        await invoke("set_auto_start", { enabled });
+        setAutoStartEnabled(enabled);
+        toast.success(enabled ? "已设置开机自启" : "已取消开机自启");
+      } catch (e) {
+        toast.error(`设置失败: ${e}`);
+      }
+    },
+    [toast],
+  );
+
+  // ─── LHM status ────────────────────────────────────────
+  const [lhmStatus, setLhmStatus] = useState<LhmStatus | null>(null);
+
+  useEffect(() => {
+    getLhmStatus()
+      .then(setLhmStatus)
+      .catch(() => setLhmStatus("Unavailable"));
+  }, []);
+
+  // ─── Handlers ──────────────────────────────────────────
+
   const handleThemeChange = async (value: string) => {
     try {
       setTheme(value as "light" | "dark" | "system");
@@ -78,7 +124,7 @@ export default function SettingsPage() {
   };
 
   const handleToggle = async (
-    key: "close_to_tray" | "auto_start",
+    key: "close_to_tray",
     value: boolean,
   ) => {
     try {
@@ -97,6 +143,74 @@ export default function SettingsPage() {
       toast.error("保存失败");
     }
   };
+
+  // ─── Fan curve export/import ───────────────────────────
+  const handleExportCurves = useCallback(async () => {
+    try {
+      const { getDesktopFanPolicies, probeDesktopFanTypes, getDesktopFanCurve } = await import("@/lib/tauri-commands");
+      const policies = await getDesktopFanPolicies();
+      const fanTypes = await probeDesktopFanTypes();
+      const curves: Record<string, unknown> = {};
+
+      for (const [fanType, modes] of fanTypes) {
+        for (const mode of modes) {
+          const curve = await getDesktopFanCurve(fanType, mode);
+          if (curve) {
+            curves[`fan${fanType}_${mode}`] = curve;
+          }
+        }
+      }
+
+      const exportData = {
+        version: 1,
+        timestamp: new Date().toISOString(),
+        policies,
+        curves,
+      };
+
+      const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+        type: "application/json",
+      });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `nocrate-fan-profile-${Date.now()}.json`;
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success("风扇配置已导出");
+    } catch (e) {
+      toast.error(`导出失败: ${e}`);
+    }
+  }, [toast]);
+
+  const handleImportCurves = useCallback(() => {
+    const input = document.createElement("input");
+    input.type = "file";
+    input.accept = ".json";
+    input.onchange = async () => {
+      const file = input.files?.[0];
+      if (!file) return;
+      try {
+        const text = await file.text();
+        const data = JSON.parse(text);
+        if (data.version !== 1 || !data.curves) {
+          toast.error("无效的配置文件格式");
+          return;
+        }
+
+        const { setDesktopFanCurve } = await import("@/lib/tauri-commands");
+        let count = 0;
+        for (const curve of Object.values(data.curves)) {
+          await setDesktopFanCurve(curve as Parameters<typeof setDesktopFanCurve>[0]);
+          count++;
+        }
+        toast.success(`已导入 ${count} 条风扇曲线`);
+      } catch (e) {
+        toast.error(`导入失败: ${e}`);
+      }
+    };
+    input.click();
+  }, [toast]);
 
   if (loading || !config) {
     return (
@@ -175,6 +289,17 @@ export default function SettingsPage() {
                 />
               </SettingRow>
               <SettingRow
+                icon={Power}
+                label="开机自启"
+                description="登录 Windows 时自动启动 NoCrate"
+              >
+                <Switch
+                  checked={autoStartEnabled ?? false}
+                  disabled={autoStartEnabled === null}
+                  onCheckedChange={handleAutoStart}
+                />
+              </SettingRow>
+              <SettingRow
                 icon={RefreshCw}
                 label="风扇轮询间隔"
                 description="数据刷新频率"
@@ -186,6 +311,103 @@ export default function SettingsPage() {
                   className="w-28"
                 />
               </SettingRow>
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Sensor Service */}
+      <motion.div variants={staggerItem} transition={spring.soft}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Activity className="h-4 w-4" />
+              传感器服务
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-muted-foreground">LibreHardwareMonitor</span>
+                </div>
+                {lhmStatus === "Available" ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-foreground">
+                    <CheckCircle className="h-3.5 w-3.5 text-green-500" />
+                    已连接
+                  </span>
+                ) : lhmStatus === "NoSensors" ? (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-yellow-600">
+                    <CheckCircle className="h-3.5 w-3.5" />
+                    已连接（无传感器数据）
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 text-xs font-medium text-destructive">
+                    <XCircle className="h-3.5 w-3.5" />
+                    未检测到
+                  </span>
+                )}
+              </div>
+              {lhmStatus !== "Available" && (
+                <div className="rounded-md border border-border bg-muted/50 p-3 text-xs text-muted-foreground">
+                  <p>
+                    实时传感器监控需要{" "}
+                    <button
+                      type="button"
+                      className="inline-flex items-center gap-0.5 font-medium text-primary hover:underline"
+                      onClick={() =>
+                        openUrl(
+                          "https://github.com/LibreHardwareMonitor/LibreHardwareMonitor/releases",
+                        )
+                      }
+                    >
+                      LibreHardwareMonitor
+                      <ExternalLink className="h-3 w-3" />
+                    </button>{" "}
+                    以管理员权限运行。
+                  </p>
+                  <p className="mt-1">
+                    安装后以管理员身份启动 LHM，即可在「传感器」页面查看 CPU 温度、风扇转速等实时数据。
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Fan Profile Export/Import */}
+      <motion.div variants={staggerItem} transition={spring.soft}>
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Download className="h-4 w-4" />
+              风扇配置
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              <p className="text-xs text-muted-foreground">
+                导出当前所有风扇曲线和策略为 JSON 文件，或从文件导入恢复。
+              </p>
+              <div className="flex gap-2">
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleExportCurves}
+                >
+                  <Download className="mr-1.5 h-3.5 w-3.5" />
+                  导出配置
+                </Button>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={handleImportCurves}
+                >
+                  <Upload className="mr-1.5 h-3.5 w-3.5" />
+                  导入配置
+                </Button>
+              </div>
             </div>
           </CardContent>
         </Card>
