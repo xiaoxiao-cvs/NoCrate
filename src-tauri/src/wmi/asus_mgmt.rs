@@ -36,33 +36,9 @@ pub mod device_id {
     /// Middle / chassis-fan-2 tachometer — RPM (read-only).
     pub const MID_FAN_SPEED: u32 = 0x0011_0031;
 
-    /// Thermal control master switch.
-    #[allow(dead_code)]
-    pub const THERMAL_CTRL: u32 = 0x0011_0011;
-
-    /// Fan control mode.
-    #[allow(dead_code)]
-    pub const FAN_CTRL: u32 = 0x0011_0012;
-
     /// Throttle thermal policy — the overall "profile"
     /// (Standard 0 / Performance 1 / Silent 2).
     pub const THROTTLE_THERMAL_POLICY: u32 = 0x0012_0075;
-
-    /// CPU fan-curve data (read/write).
-    #[allow(dead_code)]
-    pub const CPU_FAN_CURVE: u32 = 0x0011_0024;
-
-    /// GPU fan-curve data (read/write).
-    #[allow(dead_code)]
-    pub const GPU_FAN_CURVE: u32 = 0x0011_0025;
-
-    /// Middle fan-curve data (read/write).
-    #[allow(dead_code)]
-    pub const MID_FAN_CURVE: u32 = 0x0011_0032;
-
-    /// Firmware version query.
-    #[allow(dead_code)]
-    pub const CMD_FIRMWARE: u32 = 0x0002_0013;
 }
 
 // ---------------------------------------------------------------------------
@@ -113,16 +89,6 @@ impl FanTarget {
         }
     }
 
-    /// Device ID for this fan's curve data.
-    #[must_use]
-    #[allow(dead_code)]
-    pub const fn curve_device_id(self) -> u32 {
-        match self {
-            Self::Cpu => device_id::CPU_FAN_CURVE,
-            Self::Gpu => device_id::GPU_FAN_CURVE,
-            Self::Mid => device_id::MID_FAN_CURVE,
-        }
-    }
 }
 
 /// ASUS thermal-profile presets.
@@ -141,10 +107,6 @@ pub enum ThermalProfile {
 }
 
 impl ThermalProfile {
-    /// All profiles, handy for iteration / UI.
-    #[allow(dead_code)]
-    pub const ALL: [Self; 3] = [Self::Standard, Self::Performance, Self::Silent];
-
     /// Convert to the raw DEVS control value.
     #[must_use]
     pub const fn to_raw(self) -> u32 {
@@ -388,27 +350,6 @@ pub struct DesktopFanPolicy {
     pub source: String,
     /// Minimum RPM threshold.
     pub low_limit: u32,
-}
-
-/// Friendly display names for desktop fan headers.
-#[allow(dead_code)]
-const DESKTOP_FAN_NAMES: [&str; 8] = [
-    "CPU Fan",
-    "Chassis Fan 1",
-    "Chassis Fan 2",
-    "Chassis Fan 3",
-    "Chassis Fan 4",
-    "Chassis Fan 5",
-    "Chassis Fan 6",
-    "Chassis Fan 7",
-];
-
-/// Get the display name for a desktop fan header index.
-#[allow(dead_code)]
-pub fn desktop_fan_name(fan_type: u8) -> &'static str {
-    DESKTOP_FAN_NAMES
-        .get(fan_type as usize)
-        .unwrap_or(&"Unknown Fan")
 }
 
 /// Read the fan policy for a single desktop fan header.
@@ -686,16 +627,6 @@ pub fn probe_desktop_fan_types(conn: &WmiConnection) -> Vec<(u8, Vec<DesktopFanM
     }
 
     result
-}
-
-// ---------------------------------------------------------------------------
-// Backend detection helper
-// ---------------------------------------------------------------------------
-
-/// Returns `true` if the current WMI connection uses the desktop backend.
-#[allow(dead_code)]
-pub fn is_desktop_backend(conn: &WmiConnection) -> bool {
-    matches!(conn.backend, AsusWmiBackend::Desktop { .. })
 }
 
 // ---------------------------------------------------------------------------
